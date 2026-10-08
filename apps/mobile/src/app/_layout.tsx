@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { View } from 'react-native';
-import { Stack } from 'expo-router';
+import { AppState, View } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { Stack, router } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -8,9 +9,23 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, useFonts } from '
 import { color } from '@drift/tokens';
 import { Toast } from '../components/Toast';
 import { restoreSession } from '../lib/account';
+import { checkFollowedCreators, wallpaperFromResponse } from '../lib/notifications';
 import { loadPersisted, useApp } from '../lib/store';
 
 void SplashScreen.preventAutoHideAsync();
+
+// Show Drift's notifications even while Drift is open.
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false }),
+});
+
+function openFromNotification(response: Notifications.NotificationResponse | null) {
+  const id = wallpaperFromResponse(response);
+  if (id === null) return;
+  // Handled: the next launch should not reopen it.
+  Notifications.clearLastNotificationResponse();
+  router.push(`/wallpaper/${id}`);
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold });
@@ -23,6 +38,22 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (fontsLoaded && ready) void SplashScreen.hideAsync();
+  }, [fontsLoaded, ready]);
+
+  // Settings are loaded once `ready`; check now and whenever Drift comes back to the front.
+  useEffect(() => {
+    if (!ready) return;
+    void checkFollowedCreators();
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && void checkFollowedCreators());
+    return () => sub.remove();
+  }, [ready]);
+
+  // Wait for the navigator before following a tapped notification.
+  useEffect(() => {
+    if (!fontsLoaded || !ready) return;
+    openFromNotification(Notifications.getLastNotificationResponse());
+    const sub = Notifications.addNotificationResponseReceivedListener(openFromNotification);
+    return () => sub.remove();
   }, [fontsLoaded, ready]);
 
   if (!fontsLoaded || !ready) return null;
@@ -38,6 +69,7 @@ export default function RootLayout() {
           <Stack.Screen name="account" />
           <Stack.Screen name="about" />
           <Stack.Screen name="upgrade" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="live-photo" options={{ presentation: 'modal' }} />
         </Stack>
         <Toast />
       </View>

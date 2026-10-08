@@ -77,12 +77,24 @@ the right heading.
 
 - [x] ~~Home, Explore, Library, Settings, wallpaper sheet, Account, About, Upgrade~~
 - [x] ~~Runs on the iOS Simulator (Expo Go)~~
-- [ ] Android live wallpaper (native `WallpaperService` module)
-- [ ] iOS: save the loop as a Live Photo and guide the user to Settings › Wallpaper
-- [ ] Development build (needed once native wallpaper code exists), EAS build and submit
-- [ ] Run on Android
-- [ ] Real blur for glass on Android
-- [ ] Notifications for "New from followed creators"
+- [x] ~~Android live wallpaper (native `WallpaperService` in `modules/drift-wallpaper`): draws the art natively, honours frame rate and "Pause in Low Power Mode", stops while hidden~~
+- [x] ~~Android: first apply opens the system preview (home or home + lock chosen there); later applies swap in place~~
+- [x] ~~iOS: render the loop as a Live Photo (`.mov` + JPEG with matching identifier), save to Photos, guide screen for Settings › Wallpaper~~
+- [ ] iOS: tap through "Set as wallpaper" on a simulator/device and set the saved Live Photo (built and installed, not yet exercised)
+- [x] ~~Expo Go says the wallpaper needs the Drift build instead of failing~~
+- [x] ~~Development build: `expo-dev-client`, `pnpm ios` / `pnpm android` now run `expo run:*`; built and running on the iOS Simulator and the Android emulator~~
+- [x] ~~`eas.json` profiles: development, development-simulator, preview, production; submit profile~~
+- [ ] **Owner:** `eas login`, `eas init` (expo.dev project + `projectId`), first `eas build`, then `eas submit` (steps in `docs/phone.md`)
+- [x] ~~Run on Android (Pixel 8 emulator, Android dev build)~~
+- [x] ~~Real blur for glass on Android (`BlurTargetView`; tab bar blurs the current tab, wallpaper sheet blurs the art)~~
+- [x] ~~Follow creators from the wallpaper sheet (kept on the phone until accounts sync)~~
+- [x] ~~Notifications for "New from followed creators": permission asked when turned on, check on launch and return to the app, tap opens the wallpaper~~
+- [ ] Server push for followed creators while Drift is closed (needs the real catalog and a push endpoint)
+- [x] ~~Toasts were invisible on Android (behind the native screens); fixed with elevation~~
+- [x] ~~Local iOS builds work from a path with spaces: `expo-constants` podspec patch, `withSpaceSafeBundlePhase` config plugin~~
+- [x] ~~CI compiles the Android native project on every PR~~
+- [x] ~~`docs/phone.md`: running dev builds, how wallpapers are set, EAS steps~~
+- [x] ~~Tests for the native wallpaper flows, notifications and following (75 tests in all)~~
 
 ## Branches, CI & releases
 

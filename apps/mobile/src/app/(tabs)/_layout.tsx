@@ -3,7 +3,8 @@ import { Tabs } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Compass, GearSix, House, Stack as StackIcon, type IconProps } from 'phosphor-react-native';
 import { color } from '@drift/tokens';
-import { Glass } from '../../components/Glass';
+import { Glass, GlassTarget } from '../../components/Glass';
+import { tabBlurTarget } from '../../components/TabScreen';
 import { Text } from '../../components/Text';
 
 /** expo-router's own Tabs typing, so the app does not import @react-navigation directly. */
@@ -20,6 +21,7 @@ const ICONS: Record<string, React.ComponentType<IconProps>> = {
 function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   return (
+    <GlassTarget target={tabBlurTarget(state.routes[state.index].name)}>
     <Glass radius={28} style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(insets.bottom, 12) + 8, height: 66 }}>
       <View style={{ flex: 1, flexDirection: 'row' }}>
         {state.routes.map((route, i) => {
@@ -46,6 +48,7 @@ function GlassTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         })}
       </View>
     </Glass>
+    </GlassTarget>
   );
 }
 

@@ -10,3 +10,4 @@ apps/mobile/android/
 .env
 .env.local
 *.tsbuildinfo
+apps/mobile/modules/*/android/build/

@@ -92,3 +92,22 @@ jobs:
       # Metro bundles the JS for both platforms; native builds need EAS or a dev build.
       - run: npx expo export --platform ios --platform android --output-dir "$RUNNER_TEMP/expo-export"
         working-directory: apps/mobile
+
+  android:
+    name: Phone native build (Android)
+    # The live wallpaper is Kotlin in apps/mobile/modules/drift-wallpaper; compile it here so a
+    # break shows up on the PR, not in an EAS build. One ABI keeps the job short.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: gradle/actions/setup-gradle@v4
+      - run: pnpm install --frozen-lockfile
+      - run: npx expo prebuild --platform android --no-install
+        working-directory: apps/mobile
+      - run: ./gradlew :app:assembleDebug -PreactNativeArchitectures=x86_64
+        working-directory: apps/mobile/android

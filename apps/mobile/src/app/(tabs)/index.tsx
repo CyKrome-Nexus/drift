@@ -9,6 +9,7 @@ import { CATEGORIES, FEATURED, TRENDING, byCategory, catalog, wallpaper, type Ca
 import { alpha, color } from '@drift/tokens';
 import { Art } from '../../components/Art';
 import { Button } from '../../components/controls';
+import { TabScreen } from '../../components/TabScreen';
 import { Text } from '../../components/Text';
 import { WallpaperCard } from '../../components/WallpaperCard';
 import { toggleFav, useApp } from '../../lib/store';
@@ -52,7 +53,7 @@ function Hero() {
           <Text size={12}>{w.publisher}</Text> · {w.category} · {w.loop} loop
         </Text>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
-          <Button variant="primary" label="Apply" icon={<DeviceMobile size={17} color={color.accent} />} onPress={() => applyWallpaper(w)} style={{ flex: 1 }} />
+          <Button variant="primary" label="Apply" icon={<DeviceMobile size={17} color={color.accent} />} onPress={() => void applyWallpaper(w)} style={{ flex: 1 }} />
           <Button label="Details" icon={<Info size={17} color={color.text} />} onPress={() => router.push(`/wallpaper/${w.id}`)} style={{ flex: 1 }} />
           <Pressable accessibilityRole="button" accessibilityLabel={fav ? 'Remove from favourites' : 'Add to favourites'} onPress={() => toggleFav(w.id)} style={styles.iconBtn}>
             <Heart size={18} color={color.accent} weight={fav ? 'fill' : 'regular'} />
@@ -79,7 +80,7 @@ export default function Home() {
   const cats = CATEGORIES.filter((c) => chip === 'All' || chip === c.category);
 
   return (
-    <View style={{ flex: 1, backgroundColor: color.bg }}>
+    <TabScreen route="index" style={{ backgroundColor: color.bg }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 130 }} showsVerticalScrollIndicator={false}>
         <Hero />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 4 }}>
@@ -127,7 +128,7 @@ export default function Home() {
           <Text weight="semibold" size={13} tone={user ? color.accentRamp[200] : color.neutral[300]}>{user ? initials(user) : '?'}</Text>
         </Pressable>
       </View>
-    </View>
+    </TabScreen>
   );
 }
 

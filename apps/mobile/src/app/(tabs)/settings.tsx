@@ -20,21 +20,33 @@ import { displayName, initials, planLine } from '@drift/account';
 import { isProOption, type MobileSettings } from '@drift/core';
 import { color } from '@drift/tokens';
 import { Group, Row, Toggle } from '../../components/controls';
+import { TabScreen } from '../../components/TabScreen';
 import { Text } from '../../components/Text';
 import { requirePro } from '../../lib/account';
-import { updateSettings, useApp } from '../../lib/store';
+import { checkFollowedCreators, enableNotifications } from '../../lib/notifications';
+import { toast, updateSettings, useApp } from '../../lib/store';
 
 type BoolKey = { [K in keyof MobileSettings]: MobileSettings[K] extends boolean ? K : never }[keyof MobileSettings];
 
 const ic = (Icon: React.ComponentType<{ size: number; color: string }>) => <Icon size={19} color={color.accent} />;
 
-function SettingToggle({ k, label, icon, first }: { k: BoolKey; label: string; icon: React.ReactNode; first?: boolean }) {
+function SettingToggle({ k, label, icon, first, onChange }: { k: BoolKey; label: string; icon: React.ReactNode; first?: boolean; onChange?: (v: boolean) => void }) {
   const on = useApp((s) => s.settings[k]);
   return (
     <Row icon={icon} label={label} first={first}>
-      <Toggle on={on} label={label} onChange={(v) => updateSettings({ [k]: v })} />
+      <Toggle on={on} label={label} onChange={onChange ?? ((v) => updateSettings({ [k]: v }))} />
     </Row>
   );
+}
+
+/** Only on once the system allows Drift to notify. */
+async function setNotifyFollowed(on: boolean) {
+  if (on && !(await enableNotifications().catch(() => false))) {
+    toast('Allow notifications for Drift in your phone’s Settings', 'info');
+    return;
+  }
+  updateSettings({ notifyFollowed: on });
+  if (on) void checkFollowedCreators();
 }
 
 /** Tapping steps to the next option; Pro-only options open the upgrade sheet on free plans. */
@@ -79,7 +91,7 @@ export default function Settings() {
   const insets = useSafeAreaInsets();
   const plan = useApp((s) => s.account.plan.plan);
   return (
-    <View style={{ flex: 1, backgroundColor: color.bg }}>
+    <TabScreen route="settings" style={{ backgroundColor: color.bg }}>
       <LinearGradient colors={[color.surface, color.bg]} locations={[0, 0.4]} start={{ x: 0, y: 0 }} end={{ x: 0.3, y: 1 }} style={StyleSheet.absoluteFill} />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 24, paddingHorizontal: 16, paddingBottom: 130, gap: 20 }}>
         <Text weight="medium" size={30} style={{ marginHorizontal: 4, marginTop: 6 }}>Settings</Text>
@@ -99,7 +111,7 @@ export default function Settings() {
         </Group>
 
         <Group title="Account">
-          <SettingToggle first k="notifyFollowed" label="New from followed creators" icon={ic(Bell)} />
+          <SettingToggle first k="notifyFollowed" label="New from followed creators" icon={ic(Bell)} onChange={(v) => void setNotifyFollowed(v)} />
           <Row
             icon={ic(CrownSimple)}
             label="Subscription"
@@ -112,7 +124,7 @@ export default function Settings() {
           <Row first icon={ic(Info)} label="About Drift" value="" onPress={() => router.push('/about')} />
         </Group>
       </ScrollView>
-    </View>
+    </TabScreen>
   );
 }
 

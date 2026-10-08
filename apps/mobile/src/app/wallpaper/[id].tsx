@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, Share, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, Share, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,10 +24,10 @@ import {
 import { catalog, wallpaper, type MobileSettings } from '@drift/core';
 import { alpha, color } from '@drift/tokens';
 import { Art } from '../../components/Art';
-import { Glass } from '../../components/Glass';
+import { BlurTarget, Glass, GlassTarget, useBlurTargetRef } from '../../components/Glass';
 import { Text } from '../../components/Text';
 import { requirePro } from '../../lib/account';
-import { setState, toast, toggleFav, updateSettings, useApp } from '../../lib/store';
+import { setState, toast, toggleFav, toggleFollow, updateSettings, useApp } from '../../lib/store';
 import { applyWallpaper, downloadWallpaper } from '../../lib/wallpaper';
 
 const TARGETS: Array<MobileSettings['applyTarget']> = ['Home', 'Lock', 'Both'];
@@ -77,14 +77,19 @@ export default function WallpaperScreen() {
   const fav = useApp((s) => s.favs.includes(id));
   const target = useApp((s) => s.settings.applyTarget);
   const isPro = useApp((s) => s.account.plan.plan === 'pro');
+  const following = useApp((s) => s.following);
+  const notify = useApp((s) => s.settings.notifyFollowed);
+  const applying = useApp((s) => s.applying === id);
   const [paused, setPaused] = useState(false);
   const [listsOpen, setListsOpen] = useState(false);
+  const backdrop = useBlurTargetRef();
 
   if (!Number.isInteger(id) || !catalog()[id]) {
     return <View style={{ flex: 1, backgroundColor: color.bg, alignItems: 'center', justifyContent: 'center' }}><Text>Wallpaper not found.</Text></View>;
   }
   const w = wallpaper(id);
   const locked = w.tier === 'pro' && !isPro;
+  const followed = following.includes(w.publisher);
 
   const actions = [
     { label: fav ? 'Favourited' : 'Favourite', icon: <Heart size={21} weight={fav ? 'fill' : 'regular'} color={color.accent} />, onPress: () => toggleFav(id) },
@@ -95,8 +100,11 @@ export default function WallpaperScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: color.bg }}>
-      <Art w={w} paused={paused} />
-      <LinearGradient colors={[alpha(color.bg, 0.55), alpha(color.bg, 0)]} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 120 }} />
+      <BlurTarget target={backdrop} style={StyleSheet.absoluteFill}>
+        <Art w={w} paused={paused} />
+        <LinearGradient colors={[alpha(color.bg, 0.55), alpha(color.bg, 0)]} style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 120 }} />
+      </BlurTarget>
+      <GlassTarget target={backdrop}>
 
       <View style={[styles.topBar, { top: insets.top + 14 }]}>
         <RoundGlass label="Back" onPress={() => router.back()}><CaretLeft size={20} color={color.text} /></RoundGlass>
@@ -134,8 +142,11 @@ export default function WallpaperScreen() {
             </View>
             <Text size={11} tone={color.neutral[400]}>{w.phoneRes} · {w.fps} fps · {w.phoneSizeMb} MB</Text>
           </View>
-          <Pressable accessibilityRole="button" onPress={() => toast('Following creators arrives with the wallpaper catalog', 'info')}>
-            <Glass radius={8} style={{ height: 36, paddingHorizontal: 14, justifyContent: 'center' }}><Text size={13}>Follow</Text></Glass>
+          <Pressable accessibilityRole="button" accessibilityState={{ selected: followed }} onPress={() => {
+            toggleFollow(w.publisher);
+            if (!followed) toast(notify ? `Following ${w.publisher}` : `Following ${w.publisher} · turn on notifications in Settings to hear about new wallpapers`, notify ? 'ok' : 'info');
+          }}>
+            <Glass accent={followed} radius={8} style={{ height: 36, paddingHorizontal: 14, justifyContent: 'center' }}><Text size={13}>{followed ? 'Following' : 'Follow'}</Text></Glass>
           </Pressable>
         </View>
 
@@ -161,13 +172,14 @@ export default function WallpaperScreen() {
           })}
         </Glass>
 
-        <Pressable accessibilityRole="button" onPress={() => applyWallpaper(w)} style={({ pressed }) => pressed && { opacity: 0.85 }}>
+        <Pressable accessibilityRole="button" accessibilityState={{ busy: applying }} disabled={applying} onPress={() => void applyWallpaper(w)} style={({ pressed }) => (pressed || applying) && { opacity: 0.85 }}>
           <Glass accent radius={16} style={styles.cta}>
-            {locked ? <CrownSimple size={18} weight="fill" color={color.text} /> : <DeviceMobile size={18} color={color.text} />}
-            <Text weight="medium" size={15}>{locked ? 'Unlock with Drift Pro' : 'Set as wallpaper'}</Text>
+            {applying ? <ActivityIndicator color={color.text} /> : locked ? <CrownSimple size={18} weight="fill" color={color.text} /> : <DeviceMobile size={18} color={color.text} />}
+            <Text weight="medium" size={15}>{locked ? 'Unlock with Drift Pro' : applying ? 'Setting wallpaper…' : 'Set as wallpaper'}</Text>
           </Glass>
         </Pressable>
       </Glass>
+      </GlassTarget>
     </View>
   );
 }
