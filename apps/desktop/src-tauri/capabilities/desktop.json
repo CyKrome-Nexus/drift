@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "desktop-capability",
+  "description": "Self-update, relaunch, and launch at login.",
+  "platforms": ["macOS", "windows", "linux"],
+  "windows": ["main"],
+  "permissions": ["updater:default", "process:allow-restart", "autostart:allow-enable", "autostart:allow-disable", "autostart:allow-is-enabled"]
+}

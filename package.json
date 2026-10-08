@@ -1,0 +1,20 @@
+{
+  "name": "drift",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@12.4.2",
+  "scripts": {
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "dev:desktop": "pnpm --filter @drift/desktop tauri dev",
+    "build:desktop": "pnpm --filter @drift/desktop tauri build",
+    "dev:mobile": "pnpm --filter @drift/mobile start",
+    "ios": "pnpm --filter @drift/mobile ios",
+    "android": "pnpm --filter @drift/mobile android"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

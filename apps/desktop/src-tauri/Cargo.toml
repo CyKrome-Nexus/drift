@@ -1,0 +1,37 @@
+[package]
+name = "drift"
+# Crate version only — the app version lives in package.json, which tauri.conf.json reads.
+version = "0.0.0"
+description = "Drift — live wallpapers"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "drift_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# macos-private-api: the window is borderless and transparent so the app can round its own
+# corners and float its own traffic lights, as the design does.
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "image-png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-opener = "2"
+tauri-plugin-process = "2"
+
+# Desktop-level wallpaper windows on macOS. Same versions Tauri itself links.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWindow", "NSResponder", "NSGraphics"] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-updater = "2"
+tauri-plugin-autostart = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+strip = true
