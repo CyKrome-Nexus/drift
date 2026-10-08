@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,8 @@ import {
   Bell,
   CaretRight,
   CrownSimple,
+  DeviceMobile,
+  Flask,
   GameController,
   Gauge,
   HardDrives,
@@ -24,7 +26,7 @@ import { TabScreen } from '../../components/TabScreen';
 import { Text } from '../../components/Text';
 import { requirePro } from '../../lib/account';
 import { checkFollowedCreators, enableNotifications } from '../../lib/notifications';
-import { toast, updateSettings, useApp } from '../../lib/store';
+import { setState, toast, updateSettings, useApp } from '../../lib/store';
 
 type BoolKey = { [K in keyof MobileSettings]: MobileSettings[K] extends boolean ? K : never }[keyof MobileSettings];
 
@@ -68,6 +70,19 @@ function SettingCycle<K extends 'fps' | 'quality'>({ k, label, icon, options, fo
   );
 }
 
+/** iOS experiment: set wallpapers through the user's Apple Shortcut. Turning it on goes via setup. */
+function ShortcutRows() {
+  const on = useApp((s) => s.iosShortcut);
+  return (
+    <Group title="iPhone wallpaper">
+      <Row first icon={ic(Flask)} label="Set with Shortcut">
+        <Toggle on={on} label="Set with Shortcut" onChange={(v) => (v ? router.push('/shortcut-setup') : setState({ iosShortcut: false }))} />
+      </Row>
+      <Row icon={ic(DeviceMobile)} label="Shortcut setup" value="" onPress={() => router.push('/shortcut-setup')} />
+    </Group>
+  );
+}
+
 function ProfileCard() {
   const { status, user, plan } = useApp((s) => s.account);
   const signedIn = status === 'signedIn' && user;
@@ -103,6 +118,8 @@ export default function Settings() {
           <SettingToggle k="muteAudio" label="Mute wallpaper audio" icon={ic(SpeakerSlash)} />
           <SettingCycle k="fps" label="Frame rate" icon={ic(Gauge)} options={['30', '60', '120']} format={(v) => `${v} fps`} />
         </Group>
+
+        {Platform.OS === 'ios' && <ShortcutRows />}
 
         <Group title="Downloads">
           <SettingToggle first k="wifiOnly" label="Wi-Fi only" icon={ic(WifiHigh)} />

@@ -31,6 +31,11 @@ the in-app preview (`src/lib/motion.ts`), and the frame rate and Low Power setti
   but long-standing URL). There the user taps the newest photo › Share › Use as Wallpaper.
   Apple offers no link to a specific photo or to the wallpaper screen, so those last taps stay
   with the user. If Photos won't open, Drift shows its own guide to Settings › Wallpaper.
+- **iOS, experimental — Shortcut**: Settings › iPhone wallpaper › "Set with Shortcut". The user
+  builds a "Drift Wallpaper" shortcut once (Get Latest Photos → Set Wallpaper Photo with Show
+  Preview off → Open App Drift; steps are on the setup screen). Drift then saves the photo and
+  runs it via `shortcuts://run-shortcut?name=Drift%20Wallpaper` (Apple's documented URL), so the
+  wallpaper changes with one tap. If Shortcuts won't open, it falls back to the Photos flow.
 
 ## EAS
 

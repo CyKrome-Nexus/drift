@@ -18,6 +18,8 @@ export interface AppState {
   lists: WallpaperList[];
   /** Creators (publisher names) the user follows. Kept on the phone until accounts sync. */
   following: string[];
+  /** iOS experiment: set wallpapers by running the "Drift Wallpaper" Apple Shortcut. */
+  iosShortcut: boolean;
   settings: MobileSettings;
   toast: { id: number; text: string; tone: 'ok' | 'info' } | null;
   account: { status: 'restoring' | 'signedOut' | 'signedIn'; user: CyKromeUser | null; plan: PlanState; planError: string | null };
@@ -33,6 +35,7 @@ let state: AppState = {
   favs: [6, 14],
   lists: [{ id: 'late-night', name: 'Late night', items: [] }],
   following: [],
+  iosShortcut: false,
   settings: DEFAULT_MOBILE_SETTINGS,
   toast: null,
   account: { status: 'restoring', user: null, plan: FREE_PLAN, planError: null },
@@ -43,9 +46,9 @@ let state: AppState = {
 const listeners = new Set<() => void>();
 
 function persist() {
-  const { favs, lists, following, settings } = state;
+  const { favs, lists, following, iosShortcut, settings } = state;
   // Fire and forget: a failed write costs remembering this change, nothing else.
-  AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ favs, lists, following, settings })).catch(() => {});
+  AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ favs, lists, following, iosShortcut, settings })).catch(() => {});
 }
 
 export function getState(): AppState {
@@ -55,7 +58,7 @@ export function getState(): AppState {
 export function setState(patch: Partial<AppState> | ((s: AppState) => Partial<AppState>)): void {
   const next = typeof patch === 'function' ? patch(state) : patch;
   state = { ...state, ...next };
-  if ('favs' in next || 'lists' in next || 'following' in next || 'settings' in next) persist();
+  if ('favs' in next || 'lists' in next || 'following' in next || 'iosShortcut' in next || 'settings' in next) persist();
   listeners.forEach((l) => l());
 }
 
@@ -81,6 +84,7 @@ export async function loadPersisted(): Promise<void> {
     ...(Array.isArray(raw.favs) ? { favs: raw.favs.filter((n): n is number => typeof n === 'number') } : {}),
     ...(Array.isArray(raw.lists) ? { lists: raw.lists as WallpaperList[] } : {}),
     ...(Array.isArray(raw.following) ? { following: raw.following.filter((n): n is string => typeof n === 'string') } : {}),
+    ...(typeof raw.iosShortcut === 'boolean' ? { iosShortcut: raw.iosShortcut } : {}),
     settings: hydrate(raw.settings, DEFAULT_MOBILE_SETTINGS),
   });
 }

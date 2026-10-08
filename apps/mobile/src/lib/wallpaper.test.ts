@@ -73,6 +73,36 @@ describe('phone wallpaper actions', () => {
     vi.useRealTimers();
   });
 
+  it('iOS experiment: with the shortcut on, runs it right after saving', async () => {
+    const { applyWallpaper, getState, setState, SHORTCUT_RUN_URL } = await fresh();
+    setState({ iosShortcut: true });
+    await applyWallpaper(free);
+    expect(SHORTCUT_RUN_URL).toBe('shortcuts://run-shortcut?name=Drift%20Wallpaper');
+    expect(native.openedUrls).toEqual([SHORTCUT_RUN_URL]);
+    expect(getState().toast?.text).toContain('with Shortcuts');
+  });
+
+  it('iOS experiment: falls back to Photos when Shortcuts will not open', async () => {
+    vi.useFakeTimers();
+    native.openUrlFails = true;
+    const { applyWallpaper, setState, PHOTOS_HINT_MS } = await fresh();
+    setState({ iosShortcut: true });
+    const done = applyWallpaper(free);
+    await vi.advanceTimersByTimeAsync(PHOTOS_HINT_MS);
+    await done;
+    // Photos fails too here, so the guide is the last resort.
+    expect(native.routes).toEqual([`/live-photo?id=${free.id}`]);
+    vi.useRealTimers();
+  });
+
+  it('remembers the shortcut experiment', async () => {
+    const first = await fresh();
+    first.setState({ iosShortcut: true });
+    const again = await fresh();
+    await again.loadPersisted();
+    expect(again.getState().iosShortcut).toBe(true);
+  });
+
   it('Android: opens the system preview the first time, naming the chosen screens', async () => {
     native.os = 'android';
     const { applyWallpaper, getState, updateSettings } = await fresh();

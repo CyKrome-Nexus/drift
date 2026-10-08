@@ -70,6 +70,7 @@ export default function RootLayout() {
           <Stack.Screen name="about" />
           <Stack.Screen name="upgrade" options={{ presentation: 'modal' }} />
           <Stack.Screen name="live-photo" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="shortcut-setup" options={{ presentation: 'modal' }} />
         </Stack>
         <Toast />
       </View>

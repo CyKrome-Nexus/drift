@@ -5,6 +5,8 @@
 // - iOS has no API for an app to set the wallpaper at all. Drift saves the loop as a Live Photo,
 //   then opens Photos, where the user picks it and taps Share › Use as Wallpaper. If Photos will
 //   not open, an in-app guide walks them through Settings › Wallpaper instead.
+//   Experiment (Settings › iPhone wallpaper): with the user's "Drift Wallpaper" Apple Shortcut
+//   installed, Drift runs it instead and the wallpaper changes with no further taps.
 // Expo Go has neither native module, so there it says what is missing instead.
 
 import { Linking, Platform } from 'react-native';
@@ -22,6 +24,10 @@ import { getState, setState, toast } from './store';
 export const PHOTOS_URL = 'photos-redirect://';
 /** How long the hint shows before Drift hands over to Photos. */
 export const PHOTOS_HINT_MS = 1800;
+/** The Apple Shortcut the user adds once (see the setup screen). The name is the contract. */
+export const SHORTCUT_NAME = 'Drift Wallpaper';
+/** Apple's documented URL for running a shortcut by name. */
+export const SHORTCUT_RUN_URL = `shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME)}`;
 
 /** The wallpaper as the native renderers read it (`WallpaperSpec` in Kotlin and Swift). */
 export function nativeSpec(w: Wallpaper, settings: MobileSettings) {
@@ -69,7 +75,8 @@ export async function applyWallpaper(w: Wallpaper): Promise<void> {
     } else if (Platform.OS === 'ios' && DriftWallpaper.saveLivePhoto) {
       toast(`Saving “${w.name}” as a Live Photo…`, 'info');
       await DriftWallpaper.saveLivePhoto(spec);
-      await handOffToPhotos(w);
+      if (getState().iosShortcut) await runShortcut(w);
+      else await handOffToPhotos(w);
     }
   } catch (e) {
     failed(e);
@@ -86,6 +93,17 @@ async function handOffToPhotos(w: Wallpaper): Promise<void> {
     await Linking.openURL(PHOTOS_URL);
   } catch {
     router.push(`/live-photo?id=${w.id}`);
+  }
+}
+
+/** The experiment: the shortcut takes the newest photo, sets it and comes back to Drift. */
+async function runShortcut(w: Wallpaper): Promise<void> {
+  toast(`Setting “${w.name}” with Shortcuts…`, 'info');
+  try {
+    await Linking.openURL(SHORTCUT_RUN_URL);
+  } catch {
+    // Shortcuts removed from the phone: the ordinary path still works.
+    await handOffToPhotos(w);
   }
 }
 

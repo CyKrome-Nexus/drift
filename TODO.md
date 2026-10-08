@@ -83,6 +83,9 @@ the right heading.
 - [x] ~~iOS: one tap saves the Live Photo, shows a hint, then opens Photos (`photos-redirect://`); the in-app guide is the fallback~~
 - [ ] iOS: tap through "Set as wallpaper" on a simulator/device and set the saved Live Photo via Share › Use as Wallpaper
 - [ ] iOS: watch App Review for `photos-redirect://` (undocumented URL); if rejected, fall back to the in-app guide only
+- [x] ~~iOS experiment: Settings › iPhone wallpaper › "Set with Shortcut" runs the user's "Drift Wallpaper" Apple Shortcut after saving (one tap); setup screen with build steps; falls back to Photos~~
+- [ ] iOS experiment: try the Shortcut flow on a real iPhone (does it keep the Live Photo motion? how often does iOS ask to allow it?) and decide between it and the Photos handoff
+- [ ] If the Shortcut flow stays: publish a ready-made "Drift Wallpaper" shortcut as an iCloud link so users tap Add instead of building it
 - [x] ~~Expo Go says the wallpaper needs the Drift build instead of failing~~
 - [x] ~~Development build: `expo-dev-client`, `pnpm ios` / `pnpm android` now run `expo run:*`; built and running on the iOS Simulator and the Android emulator~~
 - [x] ~~`eas.json` profiles: development, development-simulator, preview, production; submit profile~~
@@ -96,7 +99,7 @@ the right heading.
 - [x] ~~Local iOS builds work from a path with spaces: `expo-constants` podspec patch, `withSpaceSafeBundlePhase` config plugin~~
 - [x] ~~CI compiles the Android native project on every PR~~
 - [x] ~~`docs/phone.md`: running dev builds, how wallpapers are set, EAS steps~~
-- [x] ~~Tests for the native wallpaper flows, notifications and following (76 tests in all)~~
+- [x] ~~Tests for the native wallpaper flows, notifications and following (79 tests in all)~~
 
 ## Branches, CI & releases
 
