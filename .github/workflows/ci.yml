@@ -76,7 +76,9 @@ jobs:
           workspaces: apps/desktop/src-tauri
       - run: pnpm install --frozen-lockfile
       # No bundles, so no signing key: installers and signatures are release.yml's job.
-      - run: pnpm --filter @drift/desktop tauri build --no-bundle --ci --config '{"bundle":{"createUpdaterArtifacts":false}}'
+      # bash on every OS: PowerShell strips the quotes inside the JSON.
+      - shell: bash
+        run: pnpm --filter @drift/desktop tauri build --no-bundle --ci --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
   mobile:
     name: Phone bundles (iOS and Android)
