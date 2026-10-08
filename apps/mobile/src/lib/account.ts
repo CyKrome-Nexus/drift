@@ -1,15 +1,28 @@
-// CyKrome Account on the phone.
+// CyKrome Account on the phone: the shared session (packages/account/src/session.ts) wired to
+// this app's store, plus the Pro gates.
 //
-// Sign-in is by emailed code only: password sign-in seals the password with WebCrypto RSA-OAEP,
-// which Hermes does not provide. Codes are also the better phone experience.
+// Password sign-in works here too. Hermes has no WebCrypto, so @drift/account seals the password
+// with its plain-JS RSA-OAEP; that needs a secure random source, which expo-crypto provides.
 
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getRandomValues } from 'expo-crypto';
 import { router } from 'expo-router';
-import { AccountApiError, AccountClient, FREE_PLAN, resolvePlan, type TokenStore } from '@drift/account';
+import { AccountClient, createSession, messageOf, type AccountHost, type TokenStore } from '@drift/account';
 import { canApply, canCreateList, type ProFeature, type Wallpaper } from '@drift/core';
-import { getState, setPlan, setState } from './store';
+import { getState, setPlan, setState, subscribe } from './store';
+
+export { messageOf };
+
+if (!globalThis.crypto?.getRandomValues) {
+  (globalThis as { crypto?: Partial<Crypto> }).crypto = {
+    ...globalThis.crypto,
+    getRandomValues: getRandomValues as Crypto['getRandomValues'],
+  };
+}
 
 const BASE_URL = process.env.EXPO_PUBLIC_CDS_BASE_URL || 'https://api.cykrome.com';
+/** Optional: normally the Drift Pro product is found in the catalog by its slug. */
 const PRO_PRODUCT_ID = process.env.EXPO_PUBLIC_DRIFT_PRO_PRODUCT_ID || '';
 const TOKEN_KEY = 'drift.cykrome-token';
 
@@ -21,46 +34,41 @@ const tokenStore: TokenStore = {
 };
 
 export const account = new AccountClient({ baseUrl: BASE_URL, brand: 'nexus', tokenStore });
-export const proProductConfigured = PRO_PRODUCT_ID !== '';
 
-export function messageOf(err: unknown): string {
-  if (err instanceof AccountApiError) return err.message;
-  if (err instanceof TypeError) return 'Could not reach CyKrome. Check your connection.';
-  return err instanceof Error ? err.message : String(err);
-}
+let lastLibrary = { favs: getState().favs, lists: getState().lists, following: getState().following };
 
-export async function refreshPlan(): Promise<void> {
-  try {
-    setPlan(resolvePlan(await account.ownerships(), PRO_PRODUCT_ID));
-  } catch (err) {
-    if (err instanceof AccountApiError && err.isAuthFailure) return void (await signOut());
-    setState((s) => ({ account: { ...s.account, planError: messageOf(err) } }));
-  }
-}
+const host: AccountHost = {
+  account: () => getState().account,
+  setAccount: (patch) => setState((s) => ({ account: { ...s.account, ...patch } })),
+  setPlan,
+  library: () => ({ favs: getState().favs, lists: getState().lists, following: getState().following }),
+  setLibrary: ({ favs, lists, following }) => setState({ favs, lists, following }),
+  onLibraryChange: (listener) =>
+    subscribe(() => {
+      const { favs, lists, following } = getState();
+      if (favs === lastLibrary.favs && lists === lastLibrary.lists && following === lastLibrary.following) return;
+      lastLibrary = { favs, lists, following };
+      listener();
+    }),
+  storage: {
+    read: (k) => AsyncStorage.getItem(k),
+    write: (k, v) => AsyncStorage.setItem(k, v),
+    remove: (k) => AsyncStorage.removeItem(k),
+  },
+};
 
-export async function restoreSession(): Promise<void> {
-  try {
-    const user = await account.restore();
-    setState((s) => ({ account: { ...s.account, status: user ? 'signedIn' : 'signedOut', user } }));
-    if (user) await refreshPlan();
-  } catch (err) {
-    setState((s) => ({ account: { ...s.account, status: 'signedOut', planError: messageOf(err) } }));
-  }
-}
+export const session = createSession(account, host, { proProductId: PRO_PRODUCT_ID });
 
-export const requestCode = (email: string) => account.requestCode(email);
-
-export async function signInWithCode(email: string, code: string): Promise<void> {
-  const { user } = await account.signInWithCode(email, code);
-  setState((s) => ({ account: { ...s.account, status: 'signedIn', user } }));
-  await refreshPlan();
-}
-
-export async function signOut(): Promise<void> {
-  await account.signOut();
-  setState((s) => ({ account: { ...s.account, status: 'signedOut', user: null } }));
-  setPlan(FREE_PLAN);
-}
+export const {
+  restore: restoreSession,
+  refreshPlan,
+  syncNow,
+  signOut,
+  signInWithPassword,
+  requestCode,
+  signInWithCode,
+  signUp,
+} = session;
 
 // ---- gates: true when the action may proceed, otherwise the upgrade sheet opens ----
 

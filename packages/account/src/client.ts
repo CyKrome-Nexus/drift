@@ -1,12 +1,18 @@
 import { sealPassword } from './crypto';
 import {
   AccountApiError,
+  AccountTimeoutError,
   type AccountClientOptions,
   type CyKromeUser,
+  type Offering,
   type Ownership,
   type Session,
+  type SignUpDetails,
   type TokenStore,
 } from './types';
+
+/** Long enough for a cold backend and a slow phone network; short enough not to look hung. */
+export const DEFAULT_TIMEOUT_MS = 15_000;
 
 function errorMessage(body: unknown, status: number): string {
   if (typeof body === 'string' && body.trim()) return body;
@@ -29,6 +35,7 @@ export class AccountClient {
   private readonly brand: string;
   private readonly doFetch: typeof fetch;
   private readonly tokens: TokenStore;
+  private readonly timeoutMs: number;
   private token: string | null = null;
   private publicKeyPem: string | null = null;
 
@@ -37,6 +44,7 @@ export class AccountClient {
     this.brand = opts.brand ?? 'nexus';
     this.doFetch = opts.fetch ?? globalThis.fetch?.bind(globalThis);
     this.tokens = opts.tokenStore;
+    this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     if (!this.doFetch) throw new Error('No fetch implementation available — pass options.fetch.');
   }
 
@@ -59,20 +67,43 @@ export class AccountClient {
     }
   }
 
-  private async request<T>(method: string, path: string, opts: { body?: unknown; auth?: boolean } = {}): Promise<T> {
+  /** For the sync and purchase clients, which share this session. */
+  get bearer(): string | null {
+    return this.token;
+  }
+
+  async request<T>(method: string, path: string, opts: { body?: unknown; auth?: boolean } = {}): Promise<T> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (opts.auth !== false && this.token) headers.Authorization = `Bearer ${this.token}`;
 
-    const res = await this.doFetch(`${this.baseUrl}${path}`, {
-      method,
-      headers,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-      // The bearer token is the single source of auth; the login cookie is not usable from a
-      // Tauri webview or a native app anyway.
-      credentials: 'omit',
-    });
+    // Without a deadline a hung backend leaves the Account screen spinning forever.
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.timeoutMs);
 
-    const text = await res.text();
+    let res: Response;
+    let text: string;
+    try {
+      res = await this.doFetch(`${this.baseUrl}${path}`, {
+        method,
+        headers,
+        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+        // The bearer token is the single source of auth; the login cookie is not usable from a
+        // Tauri webview or a native app anyway.
+        credentials: 'omit',
+        signal: controller.signal,
+      });
+      text = await res.text();
+    } catch (err) {
+      if (timedOut) throw new AccountTimeoutError();
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+
     let data: unknown = null;
     if (text) {
       try { data = JSON.parse(text); } catch { data = text; }
@@ -103,10 +134,7 @@ export class AccountClient {
 
   // ---- Sign-in ----
 
-  /**
-   * Needs WebCrypto RSA-OAEP, which webviews have and React Native's Hermes does not. The phone
-   * app therefore signs in with an emailed code only.
-   */
+  /** The password is sealed before it leaves the device (crypto.ts). */
   async signInWithPassword(email: string, password: string): Promise<Session> {
     const sealed = await sealPassword(password, await this.publicKey());
     const session = await this.request<Session>('POST', '/api/auth/login', {
@@ -132,6 +160,20 @@ export class AccountClient {
     return this.setSession(session);
   }
 
+  // ---- Sign-up ----
+
+  /**
+   * Creates the account and emails a verification code; `signInWithCode` with that code
+   * verifies the address and signs in. The password is optional — without one the account
+   * signs in by emailed code only.
+   */
+  async signUp(details: SignUpDetails): Promise<void> {
+    const { password, ...rest } = details;
+    const body: Record<string, unknown> = { ...rest, email: rest.email.trim(), brand: this.brand };
+    if (password) body.password = await sealPassword(password, await this.publicKey());
+    await this.request('POST', '/api/auth/signup', { body, auth: false });
+  }
+
   me(): Promise<{ user: CyKromeUser }> {
     return this.request('GET', '/api/auth/me');
   }
@@ -151,4 +193,59 @@ export class AccountClient {
     const { ownerships } = await this.request<{ ownerships: Ownership[] }>('GET', '/api/v1/me/ownership');
     return ownerships ?? [];
   }
+
+  /** The CDS id of a catalog product, found by slug. Null when the product does not exist yet. */
+  async productId(slug: string): Promise<string | null> {
+    try {
+      const { product } = await this.request<{ product: { productId: string } }>(
+        'GET',
+        `/api/v1/catalog/products/${encodeURIComponent(slug)}`,
+        { auth: false },
+      );
+      return product?.productId ?? null;
+    } catch (err) {
+      if (err instanceof AccountApiError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
+  // ---- Purchases (CDS verifies each with the store and answers with the new ownerships) ----
+
+  async offerings(product: string): Promise<Offering[]> {
+    const { offerings } = await this.request<{ offerings: Offering[] }>(
+      'GET',
+      `/api/v1/purchases/offerings?product=${encodeURIComponent(product)}`,
+      { auth: false },
+    );
+    return offerings ?? [];
+  }
+
+  async reportApplePurchase(signedTransaction: string): Promise<Ownership[]> {
+    const { ownerships } = await this.request<{ ownerships: Ownership[] }>('POST', '/api/v1/purchases/apple', {
+      body: { signedTransaction },
+    });
+    return ownerships ?? [];
+  }
+
+  async reportGooglePurchase(purchase: { packageName: string; productId: string; purchaseToken: string }): Promise<Ownership[]> {
+    const { ownerships } = await this.request<{ ownerships: Ownership[] }>('POST', '/api/v1/purchases/google', {
+      body: purchase,
+    });
+    return ownerships ?? [];
+  }
+
+  /** Starts an online subscription; returns the payment page to open in the browser. */
+  async startCheckout(product: string): Promise<string> {
+    const { url } = await this.request<{ url: string }>('POST', '/api/v1/purchases/razorpay/checkout', { body: { product } });
+    return url;
+  }
+}
+
+/**
+ * The App Store `appAccountToken` for a CyKrome account: its 24-hex id laid out as a UUID. CDS
+ * accepts an App Store purchase only for the account whose token it carries.
+ */
+export function accountToken(userId: string): string {
+  const h = `${userId.toLowerCase()}00000000`;
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }

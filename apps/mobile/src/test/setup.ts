@@ -8,6 +8,7 @@ vi.mock('@react-native-async-storage/async-storage', async () => {
     default: {
       getItem: async (k: string) => native.storage.get(k) ?? null,
       setItem: async (k: string, v: string) => void native.storage.set(k, v),
+      removeItem: async (k: string) => void native.storage.delete(k),
     },
   };
 });
@@ -20,6 +21,13 @@ vi.mock('expo-secure-store', async () => {
     deleteItemAsync: async (k: string) => void native.secure.delete(k),
   };
 });
+
+vi.mock('expo-crypto', async () => {
+  const { webcrypto } = await import('node:crypto');
+  return { getRandomValues: <T extends Uint8Array>(a: T) => webcrypto.getRandomValues(a) };
+});
+
+vi.mock('expo-application', () => ({ applicationId: 'com.cykrome.drift' }));
 
 vi.mock('expo-router', async () => {
   const { native } = await import('./fakes');

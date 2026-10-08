@@ -64,15 +64,25 @@ the right heading.
 - [x] ~~CyKrome Account sign-in: password or emailed code (desktop), emailed code (phone)~~
 - [x] ~~Session restore; app works fully signed out~~
 - [x] ~~Pro read from CDS ownership; lock badges, upgrade sheet, settings fall back when Pro lapses~~
-- [ ] Create the "Drift Pro" product in CDS; set `VITE_DRIFT_PRO_PRODUCT_ID` / `EXPO_PUBLIC_DRIFT_PRO_PRODUCT_ID`
-- [ ] Buying Pro: Drift Pro web page; App Store / Google Play in-app purchase + server-side grant
-- [ ] Sync favourites and lists across devices (backend endpoint needed)
-- [ ] Offline library
-- [ ] Timeout for account requests (Account screen can spin forever if CDS hangs)
-- [ ] Desktop: keep the sign-in token in the OS keychain instead of webview storage
-- [ ] Phone: password sign-in and in-app sign-up (optional)
-- [ ] Sign in against the live CyKrome server end to end
-
+- [x] ~~Account logic shared by both apps in `packages/account/src/session.ts` (restore, plan, sync, purchases); details in `docs/account.md`~~
+- [x] ~~Drift Pro found in the CDS catalog by slug `drift-pro`: no product-id env vars needed (`VITE_/EXPO_PUBLIC_DRIFT_PRO_PRODUCT_ID` stay as optional overrides)~~
+- [x] ~~`scripts/create-drift-pro.mjs` creates the Drift Pro product (unlisted, slug `drift-pro`)~~
+- [ ] **Owner:** run `CDS_ADMIN_TOKEN=<admin jwt> node scripts/create-drift-pro.mjs` (live CDS has no `drift-pro` yet, so every account reads Free)
+- [x] ~~CDS backend: store purchases module: App Store (Apple root-pinned JWS), Google Play (read back with the service account), Razorpay (webhook HMAC); purchases bound to one account, reconciled into Ownership; merged and deployed to production (CyKrome-Monorepo `a695bd03`, BE-011)~~
+- [x] ~~Phone: buy Pro in the App Store / Google Play (`expo-iap`), reported to CDS before the transaction is finished; Restore purchases~~
+- [x] ~~Desktop: "Get Drift Pro" opens Razorpay checkout in the browser; plan refreshes when the window regains focus~~
+- [x] ~~Drift Pro web page at nexus.cykrome.com/drift/pro/ (CyKrome-Nexus PR #14)~~
+- [ ] **Owner:** store setup: App Store subscription + Server Notifications URL, Play subscription + RTDN + service account, Razorpay plan + webhook, then `STORE_PRODUCTS` and the provider keys on the CDS backend (steps in `docs/account.md`)
+- [ ] **Owner:** rebuild the phone dev builds; `expo-iap` and `expo-crypto` are new native modules
+- [x] ~~Sync favourites, lists and followed creators across devices (Pro): `GET/PUT /api/v1/drift/library` on CDS, last-writer-wins merge on the device; Settings › Account shows sync state and "Sync now"~~
+- [x] ~~Offline library: Drift signs in from a saved snapshot when CyKrome can't be reached; Pro keeps working until its expiry date; "Offline" badge on the account card~~
+- [x] ~~Timeout for account requests (15 s; the Account screen no longer spins forever)~~
+- [x] ~~Desktop: sign-in token in the OS keychain (Keychain / Credential Manager / Secret Service); old webview token moved across on first launch~~
+- [x] ~~Phone: password sign-in (plain-JS RSA-OAEP, since Hermes has no WebCrypto) and in-app sign-up~~
+- [x] ~~Desktop: in-app sign-up (form, then the emailed code)~~
+- [ ] Sign in against the live CyKrome server end to end. Verified live so far: public key, code request (email arrives), new purchase and sync routes deployed. Code verify not completed: Cloudflare kept dropping requests (520s and timeouts that never reached the backend, whose logs show it healthy), and the codes expired. Retry in the app, and look into the Cloudflare → origin errors
+- [x] ~~Tests for accounts: plain-JS crypto, timeouts, sign-up, sync merge, offline restore, keychain migration, store purchases (112 tests in all)~~
+- [ ] Desktop: no follow UI yet; followed creators synced from the phone are kept but not shown
 ## Phone app
 
 - [x] ~~Home, Explore, Library, Settings, wallpaper sheet, Account, About, Upgrade~~
@@ -93,7 +103,7 @@ the right heading.
 - [ ] **Owner:** `eas login`, `eas init` (expo.dev project + `projectId`), first `eas build`, then `eas submit` (steps in `docs/phone.md`)
 - [x] ~~Run on Android (Pixel 8 emulator, Android dev build)~~
 - [x] ~~Real blur for glass on Android (`BlurTargetView`; tab bar blurs the current tab, wallpaper sheet blurs the art)~~
-- [x] ~~Follow creators from the wallpaper sheet (kept on the phone until accounts sync)~~
+- [x] ~~Follow creators from the wallpaper sheet (synced with the account for Drift Pro)~~
 - [x] ~~Notifications for "New from followed creators": permission asked when turned on, check on launch and return to the app, tap opens the wallpaper~~
 - [ ] Server push for followed creators while Drift is closed (needs the real catalog and a push endpoint)
 - [x] ~~Toasts were invisible on Android (behind the native screens); fixed with elevation~~
@@ -131,7 +141,7 @@ Flow: feature → `dev` → `qa` → `main` → tag `vX.Y.Z` → release (as Ape
 
 - [ ] macOS notarization and Windows code signing
 - [ ] App Store and Google Play listings
-- [ ] Drift web pages: Pro, Docs, account, sign-up, privacy, terms (placeholders in `packages/core/src/about.ts`)
+- [ ] Drift web pages: Docs, account, sign-up, privacy, terms (placeholders in `packages/core/src/about.ts`; the Pro page is done)
 
 ## Design
 

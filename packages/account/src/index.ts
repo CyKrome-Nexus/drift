@@ -1,5 +1,6 @@
 export * from './types';
 export * from './crypto';
+export { rsaOaepEncrypt, sha256 } from './rsa';
 export * from './client';
 export * from './plan';
 
@@ -11,3 +12,5 @@ export function memoryTokenStore(initial: string | null = null) {
     async clear() { token = null; },
   };
 }
+export * from './sync';
+export * from './session';

@@ -18,8 +18,8 @@ export const PRO_FEATURES: ReadonlyArray<{ id: ProFeature; title: string; detail
   { id: 'unlimitedFrameRate', title: 'Unlimited frame rate', detail: 'Play loops at your display’s full refresh rate.' },
   { id: 'multiDisplay', title: 'Span & per-display', detail: 'Stretch one loop across screens, or give each its own.' },
   { id: 'unlimitedLists', title: 'Unlimited lists', detail: 'Free accounts keep one list.' },
-  { id: 'sync', title: 'Sync everywhere', detail: 'Favourites and lists follow your CyKrome Account to every device.', soon: true },
-  { id: 'offline', title: 'Offline library', detail: 'Keep downloaded loops playing with no connection.', soon: true },
+  { id: 'sync', title: 'Sync everywhere', detail: 'Favourites, lists and followed creators follow your CyKrome Account to every device.' },
+  { id: 'offline', title: 'Offline library', detail: 'Your library and Pro keep working with no connection, until your plan’s renewal date.' },
 ];
 
 /** How many lists a free account may keep. */

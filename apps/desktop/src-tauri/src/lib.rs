@@ -1,4 +1,5 @@
 mod engine;
+mod secrets;
 
 use engine::{ApplyOutcome, ApplyRequest, EngineState, Running};
 use serde::Serialize;
@@ -149,7 +150,16 @@ pub fn run() {
                 }
             }
         })
-        .invoke_handler(tauri::generate_handler![apply_wallpaper, stop_wallpaper, current_wallpaper, set_tray_visible, system_info])
+        .invoke_handler(tauri::generate_handler![
+            apply_wallpaper,
+            stop_wallpaper,
+            current_wallpaper,
+            set_tray_visible,
+            system_info,
+            secrets::session_token_get,
+            secrets::session_token_set,
+            secrets::session_token_clear
+        ])
         .build(tauri::generate_context!())
         .expect("error while building Drift");
 

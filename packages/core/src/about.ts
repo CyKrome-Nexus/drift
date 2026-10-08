@@ -23,13 +23,13 @@ export const PUBLISHER = {
   founderEmail: 'cykromenexus+founder-drift@gmail.com',
 } as const;
 
-// PLACEHOLDERS: the Drift pages under nexus.cykrome.com do not exist yet. Point these at the
-// real pages before release; every screen reads them from here.
+// Every screen reads these from here. The Pro page is live; the docs, account, sign-up, privacy and
+// terms pages are still placeholders to point at real pages before release.
 export const LINKS = {
   account: 'https://www.cykrome.com/account',
   signUp: 'https://www.cykrome.com/signup',
-  /** Where "Upgrade" and "Manage subscription" send people until in-app purchase exists. */
-  pro: 'https://nexus.cykrome.com/drift/pro',
+  /** What Pro is, how to buy it, and where each kind of subscription is managed. */
+  pro: 'https://nexus.cykrome.com/drift/pro/',
   docs: 'https://nexus.cykrome.com/drift/docs',
   privacy: 'https://www.cykrome.com/privacy',
   terms: 'https://www.cykrome.com/terms',

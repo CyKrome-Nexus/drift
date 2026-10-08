@@ -1,8 +1,12 @@
-import { webcrypto } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { createHash, webcrypto } from 'node:crypto';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AccountApiError,
   AccountClient,
+  AccountTimeoutError,
+  pemToDer,
+  rsaOaepEncrypt,
+  sha256,
   displayName,
   hashPassword,
   initials,
@@ -66,6 +70,9 @@ async function fakeCds() {
   const pem = `-----BEGIN PUBLIC KEY-----\n${spki}\n-----END PUBLIC KEY-----`;
   const calls: Array<{ path: string; body: any; auth: string | null }> = [];
   let ownerships: Ownership[] = [];
+  const signups: any[] = [];
+  const open = async (sealed: string) =>
+    new TextDecoder().decode(await webcrypto.subtle.decrypt({ name: 'RSA-OAEP' }, keys.privateKey, Buffer.from(sealed, 'base64')));
 
   const fetch = (async (url: string, init: RequestInit) => {
     const path = new URL(url).pathname;
@@ -84,6 +91,9 @@ async function fakeCds() {
         if (plain !== (await hashPassword('hunter2'))) return json(401, { message: 'Invalid credentials' });
         return json(200, { token: 'tok-1', user: { id: 'u1', email: body.email } });
       }
+      case '/api/auth/signup':
+        signups.push(body);
+        return json(201, { success: true });
       case '/api/auth/otp/verify':
         return body.code === '123456' ? json(200, { token: 'tok-2', user: { id: 'u1', email: body.email } }) : json(400, { message: ['Invalid code'] });
       case '/api/auth/me':
@@ -97,7 +107,7 @@ async function fakeCds() {
     }
   }) as typeof globalThis.fetch;
 
-  return { fetch, calls, setOwnerships: (o: Ownership[]) => (ownerships = o) };
+  return { fetch, calls, signups, open, pem, keys, setOwnerships: (o: Ownership[]) => (ownerships = o) };
 }
 
 describe('AccountClient', () => {
@@ -163,5 +173,57 @@ describe('AccountClient', () => {
     expect(new AccountApiError('x', 401, null).isAuthFailure).toBe(true);
     expect(new AccountApiError('x', 403, null).isAuthFailure).toBe(true);
     expect(new AccountApiError('x', 500, null).isAuthFailure).toBe(false);
+  });
+});
+
+describe('plain-JS crypto (the phone has no WebCrypto)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('hashes like node across block boundaries', () => {
+    for (const len of [0, 1, 55, 56, 63, 64, 65, 200]) {
+      const data = new Uint8Array(len).map((_, i) => (i * 7) & 0xff);
+      expect(Buffer.from(sha256(data)).toString('hex')).toBe(createHash('sha256').update(data).digest('hex'));
+    }
+  });
+
+  it('produces RSA-OAEP that WebCrypto decrypts', async () => {
+    const cds = await fakeCds();
+    const message = new TextEncoder().encode('a'.repeat(64));
+    const sealed = rsaOaepEncrypt(message, pemToDer(cds.pem));
+    expect(sealed.length).toBe(256);
+    expect(await cds.open(Buffer.from(sealed).toString('base64'))).toBe('a'.repeat(64));
+  });
+
+  it('signs in with a password when crypto.subtle is missing', async () => {
+    const cds = await fakeCds();
+    vi.stubGlobal('crypto', { getRandomValues: (a: Uint8Array) => webcrypto.getRandomValues(a) });
+    const client = new AccountClient({ baseUrl: 'https://cds.test', tokenStore: memoryTokenStore(), fetch: cds.fetch });
+    expect((await client.signInWithPassword('a@x.com', 'hunter2')).token).toBe('tok-1');
+  });
+});
+
+describe('sign-up and timeouts', () => {
+  it('signs up with a sealed password and the brand', async () => {
+    const cds = await fakeCds();
+    const client = new AccountClient({ baseUrl: 'https://cds.test', tokenStore: memoryTokenStore(), fetch: cds.fetch });
+    await client.signUp({ email: ' a@x.com ', username: 'aditi', firstName: 'Aditi', lastName: 'K', password: 'hunter2' });
+    const [body] = cds.signups;
+    expect(body).toMatchObject({ email: 'a@x.com', username: 'aditi', brand: 'nexus' });
+    expect(await cds.open(body.password)).toBe(await hashPassword('hunter2'));
+  });
+
+  it('signs up without a password for code-only accounts', async () => {
+    const cds = await fakeCds();
+    const client = new AccountClient({ baseUrl: 'https://cds.test', tokenStore: memoryTokenStore(), fetch: cds.fetch });
+    await client.signUp({ email: 'a@x.com', username: 'aditi', firstName: 'Aditi', lastName: 'K' });
+    expect(cds.signups[0]).not.toHaveProperty('password');
+    expect(cds.calls.some((c) => c.path === '/api/auth/public-key')).toBe(false);
+  });
+
+  it('gives up on a hung request with a readable error', async () => {
+    const hung = ((_url: string, init: RequestInit) =>
+      new Promise((_, reject) => init.signal!.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))))) as typeof fetch;
+    const client = new AccountClient({ baseUrl: 'https://cds.test', tokenStore: memoryTokenStore('tok'), fetch: hung, timeoutMs: 20 });
+    await expect(client.restore()).rejects.toBeInstanceOf(AccountTimeoutError);
   });
 });

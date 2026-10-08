@@ -4,7 +4,7 @@
 import { useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DEFAULT_MOBILE_SETTINGS, clampToPlan, hydrate, type MobileSettings, type ProFeature } from '@drift/core';
-import { FREE_PLAN, type CyKromeUser, type PlanState } from '@drift/account';
+import { INITIAL_ACCOUNT, type AccountState, type PlanState } from '@drift/account';
 
 export interface WallpaperList {
   id: string;
@@ -16,13 +16,13 @@ export interface AppState {
   ready: boolean;
   favs: number[];
   lists: WallpaperList[];
-  /** Creators (publisher names) the user follows. Kept on the phone until accounts sync. */
+  /** Creators (publisher names) the user follows. Synced with the account for Drift Pro. */
   following: string[];
   /** iOS experiment: set wallpapers by running the "Drift Wallpaper" Apple Shortcut. */
   iosShortcut: boolean;
   settings: MobileSettings;
   toast: { id: number; text: string; tone: 'ok' | 'info' } | null;
-  account: { status: 'restoring' | 'signedOut' | 'signedIn'; user: CyKromeUser | null; plan: PlanState; planError: string | null };
+  account: AccountState;
   upgradeFeature: ProFeature | null;
   /** The wallpaper being set right now, so a second tap does not start another. */
   applying: number | null;
@@ -38,7 +38,7 @@ let state: AppState = {
   iosShortcut: false,
   settings: DEFAULT_MOBILE_SETTINGS,
   toast: null,
-  account: { status: 'restoring', user: null, plan: FREE_PLAN, planError: null },
+  account: INITIAL_ACCOUNT,
   upgradeFeature: null,
   applying: null,
 };
@@ -60,6 +60,11 @@ export function setState(patch: Partial<AppState> | ((s: AppState) => Partial<Ap
   state = { ...state, ...next };
   if ('favs' in next || 'lists' in next || 'following' in next || 'iosShortcut' in next || 'settings' in next) persist();
   listeners.forEach((l) => l());
+}
+
+export function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
 export function useApp<T>(select: (s: AppState) => T): T {
@@ -114,7 +119,7 @@ export function updateSettings(patch: Partial<MobileSettings>): void {
 
 export function setPlan(plan: PlanState): void {
   setState((s) => ({
-    account: { ...s.account, plan, planError: null },
+    account: { ...s.account, plan },
     settings: clampToPlan(s.settings, DEFAULT_MOBILE_SETTINGS, plan.plan),
   }));
 }
