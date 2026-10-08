@@ -100,8 +100,8 @@ Flow: feature → `dev` → `qa` → `main` → tag `vX.Y.Z` → release (as Ape
 - [x] ~~Installer scripts (`install.sh`, `install-mac.sh`, `install-linux.sh`) attached to every release~~
 - [x] ~~Manual Linux AppImage test-build workflow~~
 - [x] ~~CI desktop build on Windows runs under bash (PowerShell broke the `--config` JSON)~~
-- [ ] **Owner:** add `Drift-Release` to the `cykrome-nexus-release-bot` app's repositories
-- [ ] **Owner:** set secret `APP_PRIVATE_KEY` (the release bot's `.pem`) on `CyKrome-Nexus/drift`
+- [x] ~~**Owner:** add `Drift-Release` to the `cykrome-nexus-release-bot` app's repositories~~
+- [ ] **Owner:** set secret `APP_PRIVATE_KEY` on `CyKrome-Nexus/drift` — the release bot's GitHub App private key (`.pem`), not an updater key
 - [ ] Back up `~/.drift/drift-updater.key` and `.passphrase` to a password manager
 - [ ] Merge the release-pipeline PR through `dev` → `qa` → `main`
 - [ ] First release `v0.1.0` (no hyphen, so the updater has a stable release to find)

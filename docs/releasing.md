@@ -129,7 +129,7 @@ A release can be re-run for an existing tag from *Actions → Release → Run wo
 | Variable | `PUBLIC_RELEASE_REPO` | `CyKrome-Nexus/Drift-Release` | Set |
 | Variable | `APP_ID` | `4680217` (the org's `cykrome-nexus-release-bot` app) | Set |
 | Secret | `APP_PRIVATE_KEY` | The release bot's private key (`.pem`), same as Aperture's | **Owner must set** |
-| Org app | Release bot installed on `Drift-Release` | Org settings → GitHub Apps → *cykrome-nexus-release-bot* → Configure → add `Drift-Release` | **Owner must do** |
+| Org app | Release bot installed on `Drift-Release` | Org settings → GitHub Apps → *cykrome-nexus-release-bot* → Configure → add `Drift-Release` | Done |
 
 ```bash
 gh secret set APP_PRIVATE_KEY -R CyKrome-Nexus/drift < path/to/cykrome-nexus-release-bot.private-key.pem
