@@ -44,12 +44,33 @@ describe('phone wallpaper actions', () => {
     expect(getState().toast?.text).toContain('Expo Go');
   });
 
-  it('iOS: saves a Live Photo and opens the Settings › Wallpaper guide', async () => {
-    const { applyWallpaper, getState } = await fresh();
-    await applyWallpaper(free);
+  it('iOS: saves a Live Photo, says what to tap, then opens Photos', async () => {
+    vi.useFakeTimers();
+    const { applyWallpaper, getState, PHOTOS_HINT_MS, PHOTOS_URL } = await fresh();
+    const done = applyWallpaper(free);
+    await vi.advanceTimersByTimeAsync(0);
     expect(JSON.parse(native.wallpaper.specs[0])).toMatchObject({ id: free.id, name: free.name });
-    expect(native.routes).toEqual([`/live-photo?id=${free.id}`]);
+    expect(getState().toast?.text).toContain('Share › Use as Wallpaper');
+    // The hint gets its moment before Drift leaves; the button stays busy meanwhile.
+    expect(native.openedUrls).toEqual([]);
+    expect(getState().applying).toBe(free.id);
+    await vi.advanceTimersByTimeAsync(PHOTOS_HINT_MS);
+    await done;
+    expect(native.openedUrls).toEqual([PHOTOS_URL]);
+    expect(native.routes).toEqual([]);
     expect(getState().applying).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('iOS: shows the in-app guide when Photos will not open', async () => {
+    vi.useFakeTimers();
+    native.openUrlFails = true;
+    const { applyWallpaper, PHOTOS_HINT_MS } = await fresh();
+    const done = applyWallpaper(free);
+    await vi.advanceTimersByTimeAsync(PHOTOS_HINT_MS);
+    await done;
+    expect(native.routes).toEqual([`/live-photo?id=${free.id}`]);
+    vi.useRealTimers();
   });
 
   it('Android: opens the system preview the first time, naming the chosen screens', async () => {
@@ -80,6 +101,7 @@ describe('phone wallpaper actions', () => {
   });
 
   it('ignores a second tap while a wallpaper is being set', async () => {
+    native.os = 'android';
     const { applyWallpaper } = await fresh();
     await Promise.all([applyWallpaper(free), applyWallpaper(free)]);
     expect(native.wallpaper.specs).toHaveLength(1);

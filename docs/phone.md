@@ -25,9 +25,12 @@ the in-app preview (`src/lib/motion.ts`), and the frame rate and Low Power setti
   Power Mode" is on). The first time, the system preview opens and the user taps "Set wallpaper"
   and picks home, lock or both. Apps can't skip that step. After that, choosing another Drift
   wallpaper switches it in place.
-- **iOS**: apps can't set the wallpaper. Drift renders a 3-second Live Photo (an H.264 `.mov`
-  and a JPEG that share a content identifier), saves it to Photos (add-only permission), and
-  opens a short guide to Settings › Wallpaper.
+- **iOS**: apps can't set the wallpaper. One tap renders a 3-second Live Photo (an H.264 `.mov`
+  and a JPEG that share a content identifier) and saves it to Photos (add-only permission). A
+  hint then says what to tap, and Drift opens Photos (`photos-redirect://`, an undocumented
+  but long-standing URL). There the user taps the newest photo › Share › Use as Wallpaper.
+  Apple offers no link to a specific photo or to the wallpaper screen, so those last taps stay
+  with the user. If Photos won't open, Drift shows its own guide to Settings › Wallpaper.
 
 ## EAS
 

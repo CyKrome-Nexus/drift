@@ -80,7 +80,9 @@ the right heading.
 - [x] ~~Android live wallpaper (native `WallpaperService` in `modules/drift-wallpaper`): draws the art natively, honours frame rate and "Pause in Low Power Mode", stops while hidden~~
 - [x] ~~Android: first apply opens the system preview (home or home + lock chosen there); later applies swap in place~~
 - [x] ~~iOS: render the loop as a Live Photo (`.mov` + JPEG with matching identifier), save to Photos, guide screen for Settings › Wallpaper~~
-- [ ] iOS: tap through "Set as wallpaper" on a simulator/device and set the saved Live Photo (built and installed, not yet exercised)
+- [x] ~~iOS: one tap saves the Live Photo, shows a hint, then opens Photos (`photos-redirect://`); the in-app guide is the fallback~~
+- [ ] iOS: tap through "Set as wallpaper" on a simulator/device and set the saved Live Photo via Share › Use as Wallpaper
+- [ ] iOS: watch App Review for `photos-redirect://` (undocumented URL); if rejected, fall back to the in-app guide only
 - [x] ~~Expo Go says the wallpaper needs the Drift build instead of failing~~
 - [x] ~~Development build: `expo-dev-client`, `pnpm ios` / `pnpm android` now run `expo run:*`; built and running on the iOS Simulator and the Android emulator~~
 - [x] ~~`eas.json` profiles: development, development-simulator, preview, production; submit profile~~
@@ -94,7 +96,7 @@ the right heading.
 - [x] ~~Local iOS builds work from a path with spaces: `expo-constants` podspec patch, `withSpaceSafeBundlePhase` config plugin~~
 - [x] ~~CI compiles the Android native project on every PR~~
 - [x] ~~`docs/phone.md`: running dev builds, how wallpapers are set, EAS steps~~
-- [x] ~~Tests for the native wallpaper flows, notifications and following (75 tests in all)~~
+- [x] ~~Tests for the native wallpaper flows, notifications and following (76 tests in all)~~
 
 ## Branches, CI & releases
 

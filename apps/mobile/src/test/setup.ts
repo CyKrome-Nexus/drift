@@ -28,7 +28,15 @@ vi.mock('expo-router', async () => {
 
 vi.mock('react-native', async () => {
   const { native } = await import('./fakes');
-  return { Platform: { get OS() { return native.os; } } };
+  return {
+    Platform: { get OS() { return native.os; } },
+    Linking: {
+      openURL: async (url: string) => {
+        if (native.openUrlFails) throw new Error(`Unable to open URL: ${url}`);
+        native.openedUrls.push(url);
+      },
+    },
+  };
 });
 
 vi.mock('../../modules/drift-wallpaper', async () => {
@@ -73,6 +81,8 @@ beforeEach(() => {
   native.secure.clear();
   native.routes.length = 0;
   native.os = 'ios';
+  native.openedUrls = [];
+  native.openUrlFails = false;
   native.wallpaper = { available: true, specs: [], androidResult: 'picker', error: null };
   native.notifications = { granted: false, canAskAgain: true, asked: 0, scheduled: [] };
 });

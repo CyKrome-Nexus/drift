@@ -2,17 +2,26 @@
 // - Android allows live wallpapers. Drift's `WallpaperService` (modules/drift-wallpaper) plays
 //   the art natively; the first time, the user confirms it in the system preview, after that
 //   picking another wallpaper swaps it in place.
-// - iOS has no API for an app to set the wallpaper at all. Drift saves the loop as a Live Photo
-//   and walks the user through Settings › Wallpaper.
+// - iOS has no API for an app to set the wallpaper at all. Drift saves the loop as a Live Photo,
+//   then opens Photos, where the user picks it and taps Share › Use as Wallpaper. If Photos will
+//   not open, an in-app guide walks them through Settings › Wallpaper instead.
 // Expo Go has neither native module, so there it says what is missing instead.
 
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { art, type MobileSettings, type Wallpaper } from '@drift/core';
 import DriftWallpaper from '../../modules/drift-wallpaper';
 import { requirePro } from './account';
 import { DRIFT_MS, OVERSCAN_X, OVERSCAN_Y } from './motion';
 import { getState, setState, toast } from './store';
+
+/**
+ * Photos' own URL scheme. Undocumented (Apple publishes no link into Photos or the wallpaper
+ * settings) but long-standing; it opens the library with the newest photo at the end.
+ */
+export const PHOTOS_URL = 'photos-redirect://';
+/** How long the hint shows before Drift hands over to Photos. */
+export const PHOTOS_HINT_MS = 1800;
 
 /** The wallpaper as the native renderers read it (`WallpaperSpec` in Kotlin and Swift). */
 export function nativeSpec(w: Wallpaper, settings: MobileSettings) {
@@ -60,12 +69,23 @@ export async function applyWallpaper(w: Wallpaper): Promise<void> {
     } else if (Platform.OS === 'ios' && DriftWallpaper.saveLivePhoto) {
       toast(`Saving “${w.name}” as a Live Photo…`, 'info');
       await DriftWallpaper.saveLivePhoto(spec);
-      router.push(`/live-photo?id=${w.id}`);
+      await handOffToPhotos(w);
     }
   } catch (e) {
     failed(e);
   } finally {
     setState({ applying: null });
+  }
+}
+
+/** Last step on iOS: the user's. Say what to tap, then open Photos; the guide if it won't open. */
+async function handOffToPhotos(w: Wallpaper): Promise<void> {
+  toast('Saved · in Photos, tap the newest photo › Share › Use as Wallpaper', 'info');
+  await new Promise((r) => setTimeout(r, PHOTOS_HINT_MS));
+  try {
+    await Linking.openURL(PHOTOS_URL);
+  } catch {
+    router.push(`/live-photo?id=${w.id}`);
   }
 }
 
