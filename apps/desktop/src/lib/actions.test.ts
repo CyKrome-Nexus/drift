@@ -9,6 +9,8 @@ const engine = vi.hoisted(() => ({
   running: null as Running | null,
   applied: [] as ApplyRequest[],
   listener: null as ((r: Running | null) => void) | null,
+  lockError: null as string | null,
+  locked: 0,
 }));
 
 vi.mock('./platform', () => ({
@@ -17,7 +19,18 @@ vi.mock('./platform', () => ({
   stopWallpaper: vi.fn(async () => {}),
   currentWallpaper: vi.fn(async () => engine.running),
   onWallpaperChanged: vi.fn((cb: (r: Running | null) => void) => { engine.listener = cb; return () => {}; }),
+  setLockScreen: vi.fn(async () => {
+    if (engine.lockError) throw new Error(engine.lockError);
+    engine.locked++;
+  }),
 }));
+
+// Canvas painting isn't available under jsdom; the bytes don't matter here.
+vi.mock('./paint', () => ({ stillFrame: vi.fn(async () => new Uint8Array([1, 2, 3])) }));
+
+function running(over: Partial<Running> = {}): Running {
+  return { wallpaperId: 7, target: 'Desktop', displays: 'Same', fps: '60', muted: true, startedAtMs: 1234, assignments: [], paused: null, ...over };
+}
 
 async function fresh() {
   vi.resetModules();
@@ -32,7 +45,7 @@ const pro = catalog().find((w) => w.tier === 'pro')!;
 describe('desktop actions', () => {
   beforeEach(() => {
     localStorage.clear();
-    Object.assign(engine, { inTauri: true, outcome: { live: true, note: null }, running: null, applied: [], listener: null });
+    Object.assign(engine, { inTauri: true, outcome: { live: true, note: null }, running: null, applied: [], listener: null, lockError: null, locked: 0 });
   });
 
   it('applies a free wallpaper and remembers it', async () => {
@@ -48,7 +61,7 @@ describe('desktop actions', () => {
   it('says so, and remembers nothing, when the engine could not show it', async () => {
     engine.outcome = { live: false, note: 'not built for linux yet' };
     const { apply, getState } = await fresh();
-    await apply(free);
+    await apply(free, 'Desktop');
     expect(getState().lastApplied).toBeNull();
     expect(getState().toast).toMatchObject({ tone: 'info' });
     expect(getState().toast?.text).toContain('not built for linux yet');
@@ -68,21 +81,78 @@ describe('desktop actions', () => {
     expect(engine.applied).toHaveLength(1);
   });
 
-  it('follows the engine: current wallpaper and its loop start', async () => {
+  it('follows the engine: current wallpaper, its loop start, each display and why it is paused', async () => {
     const { connectEngine, getState } = await fresh();
     await connectEngine();
-    engine.listener!({ wallpaperId: 7, target: 'Desktop', displays: 'Same', fps: '60', muted: true, startedAtMs: 1234 });
-    expect(getState().current).toEqual({ id: 7, startedAtMs: 1234 });
+    const displays = [{ display: 'Monitor #1', wallpaperId: 7, startedAtMs: 1234 }];
+    engine.listener!(running({ assignments: displays, paused: 'On battery power' }));
+    expect(getState().current).toEqual({ id: 7, startedAtMs: 1234, displays, paused: 'On battery power' });
     engine.listener!(null);
     expect(getState().current).toBeNull();
   });
 
   it('joins a wallpaper that is already running instead of applying again', async () => {
-    engine.running = { wallpaperId: 3, target: 'Desktop', displays: 'Same', fps: '60', muted: true, startedAtMs: 42 };
+    engine.running = running({ wallpaperId: 3, startedAtMs: 42 });
     const { connectEngine, getState } = await fresh();
     await connectEngine();
     expect(engine.applied).toEqual([]);
-    expect(getState().current).toEqual({ id: 3, startedAtMs: 42 });
+    expect(getState().current).toMatchObject({ id: 3, startedAtMs: 42 });
+  });
+
+  it('sends the chosen display with a per-display apply', async () => {
+    const { apply, updateSettings, setPlan } = await fresh();
+    setPlan({ plan: 'pro', expiresAt: null, source: 'purchase' });
+    updateSettings({ monitors: 'Per display' });
+    await apply(free, 'Desktop', 'Monitor #2');
+    expect(engine.applied[0]).toMatchObject({ displays: 'Per display', display: 'Monitor #2' });
+  });
+
+  it('remembers each display\'s wallpaper and resumes them one by one', async () => {
+    const first = await fresh();
+    first.setPlan({ plan: 'pro', expiresAt: null, source: 'purchase' });
+    first.updateSettings({ monitors: 'Per display' });
+    await first.connectEngine();
+    engine.listener!(running({
+      displays: 'Per display',
+      assignments: [
+        { display: 'Monitor #1', wallpaperId: free.id, startedAtMs: 1 },
+        { display: 'Monitor #2', wallpaperId: pro.id, startedAtMs: 2 },
+      ],
+    }));
+    // Quitting stops the engine; the choices stay for the next launch.
+    engine.listener!(null);
+    expect(first.getState().lastDisplays).toHaveLength(2);
+
+    engine.applied = [];
+    const second = await fresh();
+    await second.connectEngine();
+    // The plan isn't restored in this test, so the Pro wallpaper is not resumed.
+    expect(engine.applied).toEqual([expect.objectContaining({ wallpaperId: free.id, display: 'Monitor #1', displays: 'Per display' })]);
+  });
+
+  it('sets the lock screen as a still frame, alongside the desktop', async () => {
+    const { apply, getState } = await fresh();
+    await apply(free, 'Both');
+    expect(engine.applied).toHaveLength(1);
+    expect(engine.locked).toBe(1);
+    expect(getState().toast?.text).toContain('is now your wallpaper and lock screen');
+  });
+
+  it('leaves the desktop alone for "Lock screen" only', async () => {
+    const { apply, getState } = await fresh();
+    await apply(free, 'Lock screen');
+    expect(engine.applied).toEqual([]);
+    expect(getState().lastApplied).toBeNull();
+    expect(getState().toast?.text).toContain('is now your lock screen');
+  });
+
+  it('says why the lock screen was not set, without losing the desktop', async () => {
+    engine.lockError = 'macOS does not allow apps to change the lock screen';
+    const { apply, getState } = await fresh();
+    await apply(free, 'Both');
+    expect(getState().lastApplied?.wallpaperId).toBe(free.id);
+    expect(getState().toast).toMatchObject({ tone: 'ok' });
+    expect(getState().toast?.text).toContain('is now your wallpaper · macOS does not allow');
   });
 
   it('resumes the last wallpaper once, however often it is connected', async () => {

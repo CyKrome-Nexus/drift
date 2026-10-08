@@ -958,7 +958,9 @@ dependencies = [
 name = "drift"
 version = "0.0.0"
 dependencies = [
+ "gtk",
  "keyring",
+ "libloading",
  "objc2",
  "objc2-app-kit",
  "serde",
@@ -969,6 +971,8 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-process",
  "tauri-plugin-updater",
+ "windows",
+ "x11-dl",
 ]
 
 [[package]]

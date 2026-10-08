@@ -11,6 +11,8 @@ import {
   clampToPlan,
   hydrate,
   moreLike,
+  driftAt,
+  easeInOut,
   loopPositionMs,
   oklchToHex,
   search,
@@ -127,6 +129,24 @@ describe('loopPositionMs', () => {
 
   it('never goes negative when the clock is behind the start', () => {
     expect(loopPositionMs(10_000, 9_000, 32_000)).toBe(31_000);
+  });
+});
+
+describe('driftAt', () => {
+  it('runs forward over the first half of the loop and back over the second', () => {
+    expect(driftAt(0, 32_000)).toBe(0);
+    expect(driftAt(16_000, 32_000)).toBe(1);
+    expect(driftAt(8_000, 32_000)).toBeCloseTo(0.5, 6);
+    expect(driftAt(4_000, 32_000)).toBeCloseTo(driftAt(28_000, 32_000), 9);
+    expect(driftAt(32_000, 32_000)).toBe(0);
+  });
+
+  it('eases like CSS ease-in-out: slow at the ends, symmetric about the middle', () => {
+    expect(easeInOut(0.1)).toBeLessThan(0.1);
+    expect(easeInOut(0.9)).toBeGreaterThan(0.9);
+    expect(easeInOut(0.3) + easeInOut(0.7)).toBeCloseTo(1, 6);
+    // Reference value for cubic-bezier(0.42, 0, 0.58, 1) at x = 0.25.
+    expect(easeInOut(0.25)).toBeCloseTo(0.1291, 3);
   });
 });
 

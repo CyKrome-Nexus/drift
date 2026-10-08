@@ -38,15 +38,30 @@ the right heading.
 - [x] ~~Resume last wallpaper on startup~~
 - [x] ~~Only one wallpaper layer at a time (applies serialised, resume runs once)~~
 - [x] ~~App preview plays in step with the desktop wallpaper (shared loop clock)~~
-- [ ] "Per display": a different wallpaper on each screen (behaves like "Same" today)
-- [ ] Pause on battery power
-- [ ] Pause when an app is fullscreen
-- [ ] Pause above 80% CPU
-- [ ] Frame-rate limit and render quality actually applied to playback
-- [ ] Follow display changes (plugging in / removing a monitor while running)
-- [ ] Windows engine (window behind the icons via `WorkerW`)
-- [ ] Linux engine (X11 desktop window; Wayland layer-shell)
-- [ ] Lock screen (macOS does not allow it; check Windows)
+- [x] ~~"Per display": a different wallpaper on each screen. The wallpaper page's Apply row offers All / Main / Display 2…; applying to one display leaves the others playing; an unplugged display keeps its choice for when it returns~~
+- [x] ~~"Resume last wallpaper on startup" brings back each display's wallpaper with "Per display"~~
+- [x] ~~Settings › General lists each display's wallpaper when they differ~~
+- [x] ~~Pause on battery power (IOKit on macOS, `GetSystemPowerStatus` on Windows, `/sys/class/power_supply` on Linux)~~
+- [x] ~~Pause when an app is fullscreen, only on the display it covers (window list on macOS, foreground window and D3D fullscreen on Windows, `_NET_WM_STATE_FULLSCREEN` on X11)~~
+- [x] ~~Pause above 80% CPU, with hysteresis (busy after two readings above 80%, calm after two below 70%)~~
+- [x] ~~Settings › General shows why playback is paused~~
+- [x] ~~Frame-rate limit applied: the wallpaper page draws its own frames on a canvas, capped at 30 / 60 / every refresh~~
+- [x] ~~Render quality applied: canvas at full, half (Balanced) or a quarter (Low) of the pixels~~
+- [x] ~~Playback settings reach running wallpapers as soon as they change (`set_playback`)~~
+- [x] ~~Paused wallpapers stop drawing and rejoin the shared clock on resume, so they stay in step with the app's preview (`driftAt` in `packages/core` matches the CSS curve)~~
+- [x] ~~Follow display changes: displays re-read every 2 s while running; only windows whose display changed are rebuilt~~
+- [x] ~~Windows engine: window reparented into the `WorkerW` behind the icons (into `Progman` below the icons on Windows 11 24H2+); desktop repainted on Remove~~
+- [x] ~~Linux engine: X11 desktop-type window (below, sticky, click-through); Wayland background layer-shell surface via `libgtk-layer-shell.so.0` loaded at run time; GNOME on Wayland says why it can't~~
+- [x] ~~Lock screen checked: no OS plays live loops there. macOS and Linux say so; Windows gets a still frame of the loop at screen resolution (`TrySetLockScreenImageAsync`, then `LockScreen.SetImageFileAsync`)~~
+- [x] ~~"Lock screen" alone no longer touches the desktop; "Both" reports desktop and lock screen separately~~
+- [x] ~~Tray "Remove wallpaper" / "Quit" run off the main thread, so they can't deadlock with an apply in progress~~
+- [x] ~~Settings › About: engine availability is checked at run time (Linux depends on X11 / Wayland / compositor)~~
+- [x] ~~`docs/engine.md`: how the engine works per OS, pause rules, displays, lock screen~~
+- [x] ~~Tests: layout per display mode, pause rules, CPU hysteresis, fullscreen coverage, `/proc/stat`, frame cap and quality, canvas painting geometry, per-display apply / resume, lock screen outcomes~~
+- [ ] Run the Windows engine on a real Windows 10 and Windows 11 (24H2+) machine: wallpaper behind the icons, Remove repaints, display changes, fullscreen pause
+- [ ] Try the Windows lock-screen still on a real machine (Windows may refuse unpackaged apps or policy-managed lock screens)
+- [ ] Run the Linux engine on X11 (GNOME on Xorg, KDE) and Wayland with layer-shell (KDE, Sway); check stacking against GNOME's desktop-icons extension
+- [ ] Check on a real Mac that the canvas wallpaper looks identical to the app's CSS preview (same art, same frame)
 
 ## Content
 

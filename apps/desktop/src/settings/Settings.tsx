@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import {
   ArrowLeft,
   CrownSimple,
@@ -14,6 +14,7 @@ import {
 import { planLine } from '@drift/account';
 import { wallpaper } from '@drift/core';
 import { stop } from '../lib/actions';
+import { displayLabel, listDisplays, type Display } from '../lib/platform';
 import { back, openSettings, showUpgrade, toast, useApp, type Section } from '../lib/store';
 import { AboutSection } from './AboutSection';
 import { AccountSection } from './AccountSection';
@@ -67,12 +68,49 @@ function PlanCard() {
 
 function CurrentWallpaper() {
   const current = useApp((s) => s.current);
-  const w = current ? wallpaper(current.id) : null;
+  const [displays, setDisplays] = useState<Display[]>([]);
+
+  // Re-read on every change: a change may be a display plugged in or removed.
+  useEffect(() => {
+    let live = true;
+    if (current) listDisplays().then((d) => live && setDisplays(d)).catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [current]);
+
+  if (!current) {
+    return (
+      <Group title="Wallpaper">
+        <Row label="No wallpaper running" desc="Open any wallpaper and choose Apply." />
+      </Group>
+    );
+  }
+
+  const state = current.paused ? `Paused · ${current.paused}` : 'Playing behind your desktop';
+  const remove = <button type="button" className="btn btn-secondary btn-sm" onClick={() => void stop()}>Remove</button>;
+  // One row per connected display when they show different wallpapers ("Per display").
+  const shown = displays
+    .map((d, i) => ({ d, i, a: current.displays.find((a) => a.display === d.id) }))
+    .filter((x): x is { d: Display; i: number; a: NonNullable<typeof x.a> } => x.a !== undefined);
+  if (new Set(shown.map((x) => x.a.wallpaperId)).size > 1 || (shown.length > 0 && shown.length < displays.length)) {
+    return (
+      <Group title="Wallpaper">
+        {shown.map(({ d, i, a }, n) => {
+          const w = wallpaper(a.wallpaperId);
+          return (
+            <Row key={d.id} label={`${displayLabel(d, i)} · ${w.name}`} desc={n === 0 ? `${w.publisher} · ${state}` : w.publisher}>
+              {n === 0 && remove}
+            </Row>
+          );
+        })}
+      </Group>
+    );
+  }
+  const w = wallpaper(current.id);
   return (
     <Group title="Wallpaper">
-      <Row label={w ? w.name : 'No wallpaper running'} desc={w ? `${w.publisher} · playing behind your desktop` : 'Open any wallpaper and choose Apply.'}>
-        {w && <button type="button" className="btn btn-secondary btn-sm" onClick={() => void stop()}>Remove</button>}
-      </Row>
+      <Row label={w.name} desc={`${w.publisher} · ${state}`}>{remove}</Row>
     </Group>
   );
 }

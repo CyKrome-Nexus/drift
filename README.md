@@ -91,9 +91,10 @@ phone, Updates points at the App Store / Google Play instead of offering a check
 
 ## Status
 
-What is done and what is left lives in **[TODO.md](TODO.md)**. In short: the macOS wallpaper
-engine works; Windows, Linux and the phones do not have one yet, and the catalog is still the
-design's placeholder art.
+What is done and what is left lives in **[TODO.md](TODO.md)**. In short: the desktop wallpaper
+engine runs on macOS, Windows and Linux (X11, and Wayland with layer-shell), with per-display
+wallpapers and the pause rules ([docs/engine.md](docs/engine.md)); Windows and Linux are compiled
+in CI but not yet tried on real machines. The catalog is still the design's placeholder art.
 
 ## Gotchas
 

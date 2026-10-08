@@ -4,7 +4,7 @@ import { CATEGORIES, FEATURED, TRENDING, byCategory, catalog, wallpaper } from '
 import { Art } from '../components/Art';
 import { WallpaperCard } from '../components/WallpaperCard';
 import { apply } from '../lib/actions';
-import { go, openDetail, toggleFav, useApp } from '../lib/store';
+import { go, liveSince as liveSinceOf, openDetail, toggleFav, useApp } from '../lib/store';
 
 /** 60 ticks of 100ms: each featured wallpaper holds the hero for six seconds. */
 const TICKS = 60;
@@ -15,7 +15,7 @@ function Hero() {
   const [hovering, setHovering] = useState(false);
   const w = wallpaper(FEATURED[hero]);
   const fav = useApp((s) => s.favs.includes(w.id));
-  const liveSince = useApp((s) => (s.current?.id === w.id ? s.current.startedAtMs : undefined));
+  const liveSince = useApp((s) => liveSinceOf(s, w.id));
 
   useEffect(() => {
     if (hovering) return;

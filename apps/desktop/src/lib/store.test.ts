@@ -44,9 +44,28 @@ describe('desktop store', () => {
 
   it('does not persist what the engine reports as running', async () => {
     const first = await freshStore();
-    first.setState({ current: { id: 2, startedAtMs: 1 } });
+    first.setState({ current: { id: 2, startedAtMs: 1, displays: [], paused: null } });
     const second = await freshStore();
     expect(second.getState().current).toBeNull();
+  });
+
+  it('finds where a wallpaper\'s loop is, on whichever display shows it', async () => {
+    const { getState, liveSince, setState } = await freshStore();
+    expect(liveSince(getState(), 2)).toBeUndefined();
+    setState({
+      current: {
+        id: 5,
+        startedAtMs: 500,
+        displays: [
+          { display: 'Main', wallpaperId: 5, startedAtMs: 500 },
+          { display: 'Side', wallpaperId: 2, startedAtMs: 200 },
+        ],
+        paused: null,
+      },
+    });
+    expect(liveSince(getState(), 2)).toBe(200);
+    expect(liveSince(getState(), 5)).toBe(500);
+    expect(liveSince(getState(), 9)).toBeUndefined();
   });
 
   it('toggles a favourite on and off', async () => {
