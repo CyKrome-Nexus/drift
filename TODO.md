@@ -71,7 +71,8 @@ the right heading.
 - [x] ~~CDS backend: store purchases module: App Store (Apple root-pinned JWS), Google Play (read back with the service account), Razorpay (webhook HMAC); purchases bound to one account, reconciled into Ownership; merged and deployed to production (CyKrome-Monorepo `a695bd03`, BE-011)~~
 - [x] ~~Phone: buy Pro in the App Store / Google Play (`expo-iap`), reported to CDS before the transaction is finished; Restore purchases~~
 - [x] ~~Desktop: "Get Drift Pro" opens Razorpay checkout in the browser; plan refreshes when the window regains focus~~
-- [x] ~~Drift Pro web page at nexus.cykrome.com/drift/pro/ (CyKrome-Nexus PR #14)~~
+- [x] ~~Drift Pro web page at nexus.cykrome.com/drift/pro/: merged dev → qa → main (CyKrome-Nexus #14, #15, #16), image published~~
+- [ ] **Owner:** the nexus site isn't deployed: its CI deploy job only runs with repo variable `DEPLOY_ENABLED=true` (unset), so production still serves the 2026-10-03 build and /drift/pro/ is 404 until deploys are on
 - [ ] **Owner:** store setup: App Store subscription + Server Notifications URL, Play subscription + RTDN + service account, Razorpay plan + webhook, then `STORE_PRODUCTS` and the provider keys on the CDS backend (steps in `docs/account.md`)
 - [ ] **Owner:** rebuild the phone dev builds; `expo-iap` and `expo-crypto` are new native modules
 - [x] ~~Sync favourites, lists and followed creators across devices (Pro): `GET/PUT /api/v1/drift/library` on CDS, last-writer-wins merge on the device; Settings › Account shows sync state and "Sync now"~~
