@@ -11,6 +11,7 @@ the right heading.
 - [x] ~~App icons for desktop, iOS and Android from the Drift mark~~
 - [x] ~~Git repository (private, `CyKrome-Nexus/drift`) and first commit~~
 - [x] ~~CI: tests, typecheck, desktop build on macOS / Windows / Linux, phone bundles for iOS and Android~~
+- [x] ~~Mac installer picks the right file on Intel Macs (`x86_64`, not `x64`)~~
 - [x] ~~Tests for the apps themselves: desktop store, apply/resume and preview sync; phone store and wallpaper gates (62 tests in all)~~
 - [ ] Component tests for screens (only logic and `Art` are tested today)
 
@@ -83,9 +84,31 @@ the right heading.
 - [ ] Real blur for glass on Android
 - [ ] Notifications for "New from followed creators"
 
+## Branches, CI & releases
+
+Flow: feature → `dev` → `qa` → `main` → tag `vX.Y.Z` → release (as Aperture). Details in `docs/releasing.md`.
+
+- [x] ~~`dev` and `qa` branches created from `main`~~
+- [x] ~~Pre-push hook blocks direct pushes to `dev`, `qa`, `main` (`pnpm hooks` to opt in per clone)~~
+- [x] ~~CI runs on pull requests into `dev`, `qa`, `main`: `pnpm verify`, desktop builds on macOS and Windows, phone bundles~~
+- [x] ~~`pnpm verify`: tests, typecheck, desktop frontend build, release-script selfcheck, `cargo test`~~
+- [x] ~~Release workflow on `v*` tags: tag must be on `main` and match `apps/desktop/package.json`; builds macOS arm64 + Intel, Windows, Linux; publishes to Drift-Release as draft, then visible~~
+- [x] ~~Public `CyKrome-Nexus/Drift-Release` repo with install README~~
+- [x] ~~Updater signing key for Drift (`~/.drift`), public key in `tauri.conf.json`, signed updater artifacts on~~
+- [x] ~~Repo secrets `TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD`, variables `APP_ID`, `PUBLIC_RELEASE_REPO`~~
+- [x] ~~Signed macOS updater bundle built locally (`Drift.app.tar.gz` + `.sig`)~~
+- [x] ~~Installer scripts (`install.sh`, `install-mac.sh`, `install-linux.sh`) attached to every release~~
+- [x] ~~Manual Linux AppImage test-build workflow~~
+- [ ] **Owner:** add `Drift-Release` to the `cykrome-nexus-release-bot` app's repositories
+- [ ] **Owner:** set secret `APP_PRIVATE_KEY` (the release bot's `.pem`) on `CyKrome-Nexus/drift`
+- [ ] Back up `~/.drift/drift-updater.key` and `.passphrase` to a password manager
+- [ ] Merge the release-pipeline PR through `dev` → `qa` → `main`
+- [ ] First release `v0.1.0` (no hyphen, so the updater has a stable release to find)
+- [ ] Real branch protection once the org is on GitHub Team (ruleset command in `docs/releasing.md`)
+- [ ] Phone release flow (EAS build and submit) — not part of the tag release
+
 ## Releases & pages
 
-- [ ] Desktop updater: signing key, public key and release URL in `tauri.conf.json`, release pipeline
 - [ ] macOS notarization and Windows code signing
 - [ ] App Store and Google Play listings
 - [ ] Drift web pages: Pro, Docs, account, sign-up, privacy, terms (placeholders in `packages/core/src/about.ts`)
