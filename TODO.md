@@ -81,7 +81,8 @@ the right heading.
 - [x] ~~Android: first apply opens the system preview (home or home + lock chosen there); later applies swap in place~~
 - [x] ~~iOS: render the loop as a Live Photo (`.mov` + JPEG with matching identifier), save to Photos, guide screen for Settings › Wallpaper~~
 - [x] ~~iOS: one tap saves the Live Photo, shows a hint, then opens Photos (`photos-redirect://`); the in-app guide is the fallback~~
-- [ ] iOS: tap through "Set as wallpaper" on a simulator/device and set the saved Live Photo via Share › Use as Wallpaper
+- [x] ~~iOS: tap-through on the simulator reaches Apple's wallpaper editor (Set as wallpaper → Photos → Share › Use as Wallpaper)~~
+- [ ] iOS: the simulator's wallpaper editor shows the Drift photo black. The saved JPEG and MOV render correctly and share their Live Photo identifier, so this is probably the simulator. Check a stock photo in the same editor, then on a real iPhone
 - [ ] iOS: watch App Review for `photos-redirect://` (undocumented URL); if rejected, fall back to the in-app guide only
 - [x] ~~iOS experiment: Settings › iPhone wallpaper › "Set with Shortcut" runs the user's "Drift Wallpaper" Apple Shortcut after saving (one tap); setup screen with build steps; falls back to Photos~~
 - [ ] iOS experiment: try the Shortcut flow on a real iPhone (does it keep the Live Photo motion? how often does iOS ask to allow it?) and decide between it and the Photos handoff
