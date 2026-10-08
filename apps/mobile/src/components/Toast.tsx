@@ -28,10 +28,12 @@ export function Toast() {
 }
 
 const styles = StyleSheet.create({
+  // Android stacks by elevation, not zIndex: below the native screens' elevation the toast sat
+  // behind every screen and was never seen.
   toast: {
     position: 'absolute', left: 20, right: 20, zIndex: 70, flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14, backgroundColor: color.surface,
     borderWidth: 1, borderColor: color.neutral[700],
-    shadowColor: '#000', shadowOpacity: 0.55, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 8,
+    shadowColor: '#000', shadowOpacity: 0.55, shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 100,
   },
 });

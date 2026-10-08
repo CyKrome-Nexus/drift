@@ -9,9 +9,8 @@ import {
   type DesktopSettings,
   type ProFeature,
 } from '@drift/core';
-import type { CyKromeUser, PlanState } from '@drift/account';
+import { INITIAL_ACCOUNT, type AccountState, type PlanState } from '@drift/account';
 import type { ApplyRequest } from './platform';
-import { FREE_PLAN } from '@drift/account';
 
 export type Section = 'General' | 'Playback' | 'Performance' | 'Displays' | 'Library & storage' | 'Account' | 'About';
 export type BrowseTab = 'Discover' | 'Library' | 'Favourites';
@@ -28,8 +27,6 @@ export interface WallpaperList {
   items: number[];
 }
 
-export type AccountStatus = 'restoring' | 'signedOut' | 'signedIn';
-
 export interface UpdatePrefs {
   mode: 'auto' | 'notify' | 'manual';
   checkOnStartup: boolean;
@@ -40,10 +37,12 @@ export interface AppState {
   query: string;
   favs: number[];
   lists: WallpaperList[];
+  /** Creators followed on the phone. Desktop has no follow UI yet; kept so sync preserves them. */
+  following: string[];
   settings: DesktopSettings;
   updatePrefs: UpdatePrefs;
   toast: { id: number; text: string; tone: 'ok' | 'info' } | null;
-  account: { status: AccountStatus; user: CyKromeUser | null; plan: PlanState; planError: string | null };
+  account: AccountState;
   upgrade: { open: boolean; feature: ProFeature | null };
   /** The wallpaper the engine is showing right now, and when its loop started. Set only from the engine. */
   current: { id: number; startedAtMs: number } | null;
@@ -56,6 +55,7 @@ const STORAGE_KEY = 'drift.desktop.v1';
 interface Persisted {
   favs: number[];
   lists: WallpaperList[];
+  following: string[];
   settings: DesktopSettings;
   updatePrefs: UpdatePrefs;
   lastApplied: ApplyRequest | null;
@@ -73,6 +73,7 @@ function load(): Persisted {
   return {
     favs: Array.isArray(raw.favs) ? raw.favs.filter((n) => typeof n === 'number') : [6, 14],
     lists: Array.isArray(raw.lists) ? raw.lists : [{ id: 'workspace', name: 'Workspace', items: [6] }],
+    following: Array.isArray(raw.following) ? raw.following.filter((p) => typeof p === 'string') : [],
     settings: hydrate(raw.settings, DEFAULT_DESKTOP_SETTINGS),
     updatePrefs: hydrate(raw.updatePrefs, DEFAULT_UPDATE_PREFS),
     lastApplied: raw.lastApplied && typeof raw.lastApplied.wallpaperId === 'number' ? raw.lastApplied : null,
@@ -86,7 +87,7 @@ let state: AppState = {
   query: '',
   ...persisted,
   toast: null,
-  account: { status: 'restoring', user: null, plan: FREE_PLAN, planError: null },
+  account: INITIAL_ACCOUNT,
   upgrade: { open: false, feature: null },
   current: null,
 };
@@ -100,15 +101,20 @@ export function getState(): AppState {
 export function setState(patch: Partial<AppState> | ((s: AppState) => Partial<AppState>)): void {
   const next = typeof patch === 'function' ? patch(state) : patch;
   state = { ...state, ...next };
-  if ('favs' in next || 'lists' in next || 'settings' in next || 'updatePrefs' in next || 'lastApplied' in next) {
+  if ('favs' in next || 'lists' in next || 'following' in next || 'settings' in next || 'updatePrefs' in next || 'lastApplied' in next) {
     try {
-      const { favs, lists, settings, updatePrefs, lastApplied } = state;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ favs, lists, settings, updatePrefs, lastApplied } satisfies Persisted));
+      const { favs, lists, following, settings, updatePrefs, lastApplied } = state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ favs, lists, following, settings, updatePrefs, lastApplied } satisfies Persisted));
     } catch {
       // Storage full or blocked: the session still works, it just will not be remembered.
     }
   }
   listeners.forEach((l) => l());
+}
+
+export function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
 export function useApp<T>(select: (s: AppState) => T): T {
@@ -165,7 +171,7 @@ export function showUpgrade(feature: ProFeature | null = null): void {
 
 export function setPlan(plan: PlanState): void {
   setState((s) => ({
-    account: { ...s.account, plan, planError: null },
+    account: { ...s.account, plan },
     // A lapsed plan must not leave Pro-only settings in force.
     settings: clampToPlan(s.settings, DEFAULT_DESKTOP_SETTINGS, plan.plan),
   }));

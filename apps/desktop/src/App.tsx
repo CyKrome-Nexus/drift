@@ -3,7 +3,7 @@ import { Toast } from './components/Toast';
 import { TopBar } from './components/TopBar';
 import { TrafficLights } from './components/TrafficLights';
 import { UpgradeDialog } from './components/UpgradeDialog';
-import { restoreSession } from './lib/account';
+import { refreshPlan, restoreSession } from './lib/account';
 import { connectEngine } from './lib/actions';
 import { syncSystemSettings } from './lib/platform';
 import { getState, useApp } from './lib/store';
@@ -15,6 +15,9 @@ import { Settings } from './settings/Settings';
 
 /** Let the window settle before touching the network, as Aperture does. */
 const STARTUP_UPDATE_DELAY_MS = 4000;
+
+/** At most one plan refresh per this long from window focus. */
+const FOCUS_REFRESH_MS = 30_000;
 
 export function App() {
   const view = useApp((s) => s.view);
@@ -38,6 +41,20 @@ export function App() {
       disconnect?.();
       clearTimeout(t);
     };
+  }, []);
+
+  // Coming back to Drift is when the plan most likely changed (a purchase in the browser, Pro
+  // bought on the phone) and when another device's edits are worth pulling in. Refreshing the
+  // plan also syncs the library for Pro.
+  useEffect(() => {
+    let last = 0;
+    const onFocus = () => {
+      if (getState().account.status !== 'signedIn' || Date.now() - last < FOCUS_REFRESH_MS) return;
+      last = Date.now();
+      void refreshPlan();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, []);
 
   const launchAtLogin = useApp((s) => s.settings.launchAtLogin);

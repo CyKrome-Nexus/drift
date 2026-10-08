@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MagnifyingGlass, X } from 'phosphor-react-native';
 import { CATEGORIES, catalog, search, type Category } from '@drift/core';
 import { color, font } from '@drift/tokens';
+import { TabScreen } from '../../components/TabScreen';
 import { Text } from '../../components/Text';
 import { WallpaperCard } from '../../components/WallpaperCard';
 
@@ -19,7 +20,7 @@ export default function Explore() {
   const cardW = (width - PAD * 2 - GAP) / 2;
 
   return (
-    <View style={{ flex: 1, backgroundColor: color.bg, paddingTop: insets.top + 16 }}>
+    <TabScreen route="explore" style={{ backgroundColor: color.bg, paddingTop: insets.top + 16 }}>
       <View style={{ paddingHorizontal: PAD, gap: 12 }}>
         <Text weight="medium" size={30}>Explore</Text>
         <View style={styles.search}>
@@ -56,7 +57,7 @@ export default function Explore() {
         renderItem={({ item }) => <WallpaperCard w={item} width={cardW} height={cardW * 1.75} />}
         ListEmptyComponent={<Text tone={color.neutral[400]} style={{ textAlign: 'center', paddingTop: 40 }}>No wallpapers or creators match “{query}”.</Text>}
       />
-    </View>
+    </TabScreen>
   );
 }
 

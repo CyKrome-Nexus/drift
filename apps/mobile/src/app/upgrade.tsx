@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { AppState, ScrollView, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, AppState, ScrollView, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
@@ -9,8 +9,66 @@ import { alpha, color } from '@drift/tokens';
 import { Button } from '../components/controls';
 import { FEATURE_ICONS } from '../components/featureIcons';
 import { Text } from '../components/Text';
-import { refreshPlan } from '../lib/account';
-import { setState, useApp } from '../lib/store';
+import { messageOf, refreshPlan } from '../lib/account';
+import { buy, proOffers, restorePurchases, type StoreOffer } from '../lib/purchases';
+import { setState, toast, useApp } from '../lib/store';
+
+function offerLabel(o: StoreOffer): string {
+  return o.kind === 'lifetime' ? `Buy for life — ${o.price}` : `${o.title} — ${o.price}`;
+}
+
+/** The store's offers for Drift Pro, a restore button, and the web page when there is no store. */
+function Purchase() {
+  const [offers, setOffers] = useState<StoreOffer[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    proOffers()
+      .then(setOffers)
+      .catch((err) => {
+        console.warn('[purchases] no offers', messageOf(err));
+        setOffers([]);
+      });
+  }, []);
+
+  const run = async (key: string, fn: () => Promise<void>) => {
+    setBusy(key);
+    try {
+      await fn();
+    } catch (err) {
+      toast(messageOf(err), 'info');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (offers === null) return <ActivityIndicator color={color.accent} style={{ padding: 12 }} />;
+  if (!offers.length) {
+    return <Button variant="primary" label="Get Drift Pro on cykrome.com" icon={<CrownSimple size={16} weight="fill" color={color.accent} />} onPress={() => void WebBrowser.openBrowserAsync(LINKS.pro)} />;
+  }
+  return (
+    <>
+      {offers.map((o, i) => (
+        <Button
+          key={o.sku}
+          variant={i === 0 ? 'primary' : undefined}
+          label={offerLabel(o)}
+          icon={busy === o.sku ? <ActivityIndicator size="small" color={color.accent} /> : <CrownSimple size={16} weight="fill" color={color.accent} />}
+          disabled={busy !== null}
+          onPress={() => void run(o.sku, () => buy(o))}
+        />
+      ))}
+      <Button
+        label="Restore purchases"
+        disabled={busy !== null}
+        onPress={() => void run('restore', async () => {
+          const n = await restorePurchases();
+          toast(n ? 'Purchases restored' : 'Nothing to restore for this account', 'info');
+        })}
+      />
+    </>
+  );
+}
 
 export default function Upgrade() {
   const feature = useApp((s) => s.upgradeFeature);
@@ -49,7 +107,7 @@ export default function Upgrade() {
                 <Icon size={20} color={color.accent} />
                 <View style={{ flex: 1 }}>
                   <Text size={15} tone={f.id === feature ? color.accentRamp[200] : color.text}>
-                    {f.title}{f.soon ? <Text size={11} tone={color.neutral[400]}>  · Soon</Text> : null}
+                    {f.title}
                   </Text>
                   <Text size={12.5} tone={color.neutral[400]}>{f.detail}</Text>
                 </View>
@@ -60,7 +118,7 @@ export default function Upgrade() {
         </View>
         <View style={{ gap: 10, marginTop: 8 }}>
           {signedIn ? (
-            <Button variant="primary" label="Upgrade on cykrome.com" icon={<CrownSimple size={16} weight="fill" color={color.accent} />} onPress={() => void WebBrowser.openBrowserAsync(LINKS.pro)} />
+            <Purchase />
           ) : (
             <Button variant="primary" label="Sign in to upgrade" onPress={() => router.replace('/account')} />
           )}

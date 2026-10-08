@@ -1,56 +1,84 @@
 name: CI
 
+# Every hop of feature -> dev -> qa -> main is a pull request, so gating on
+# pull_request covers the whole path. Direct pushes to the long-lived branches are
+# blocked by .githooks/pre-push, and a tag release re-checks nothing — by then the
+# code has already been through here three times.
 on:
-  push:
-    branches: [main]
   pull_request:
+    branches: [dev, qa, main]
+  workflow_dispatch:
 
+permissions:
+  contents: read
+
+# A new push to the same PR makes the in-flight run irrelevant.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  check:
-    name: Tests and typecheck
-    runs-on: ubuntu-latest
+  verify:
+    name: Verify
+    # Matches the Linux leg of the release build, so the system dependencies below
+    # are the same known-good set.
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
+      # `cargo test` compiles the tauri crate, which links against webkit.
+      - name: Linux system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
         with:
-          node-version: 22
-          cache: pnpm
+          workspaces: apps/desktop/src-tauri
+
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test
-      - run: pnpm typecheck
+
+      # Tests for packages and both apps, typecheck, the desktop frontend build, the
+      # release-script selfcheck and cargo test. One script, so CI and `pnpm verify`
+      # on a laptop cannot drift apart.
+      - run: pnpm verify
+
+      # The release job substitutes a real repository into the endpoint placeholder.
+      # If someone commits an already-substituted config, or drops the public key,
+      # release.yml would only find out at tag time — check it on every PR instead.
+      - name: Updater config is still releasable
+        env:
+          PUBLIC_RELEASE_REPO: owner/ci-placeholder
+        run: node .github/scripts/set-updater-endpoint.mjs
 
   desktop:
     name: Desktop build (${{ matrix.os }})
+    # The wallpaper engine is platform code (AppKit on macOS, more to come), so each
+    # OS has to compile here rather than first fail at tag time. Linux is covered by
+    # `cargo test` in Verify.
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-22.04]
+        os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Linux system libraries
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+        with: { node-version: 22, cache: pnpm }
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
       - run: pnpm install --frozen-lockfile
-      # Compiles the frontend (beforeBuildCommand) and the Rust app; installers and signing
-      # come with the release pipeline.
-      - run: pnpm --filter @drift/desktop tauri build --no-bundle --ci
+      # No bundles, so no signing key: installers and signatures are release.yml's job.
+      # bash on every OS: PowerShell strips the quotes inside the JSON.
+      - shell: bash
+        run: pnpm --filter @drift/desktop tauri build --no-bundle --ci --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
   mobile:
     name: Phone bundles (iOS and Android)
@@ -59,10 +87,27 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
+        with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # Metro bundles the JS for both platforms; native builds need EAS or a dev build.
       - run: npx expo export --platform ios --platform android --output-dir "$RUNNER_TEMP/expo-export"
         working-directory: apps/mobile
+
+  android:
+    name: Phone native build (Android)
+    # The live wallpaper is Kotlin in apps/mobile/modules/drift-wallpaper; compile it here so a
+    # break shows up on the PR, not in an EAS build. One ABI keeps the job short.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: gradle/actions/setup-gradle@v4
+      - run: pnpm install --frozen-lockfile
+      - run: npx expo prebuild --platform android --no-install
+        working-directory: apps/mobile
+      - run: ./gradlew :app:assembleDebug -PreactNativeArchitectures=x86_64
+        working-directory: apps/mobile/android

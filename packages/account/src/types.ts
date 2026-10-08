@@ -22,6 +22,14 @@ export interface Ownership {
   expiresAt: string | null;
 }
 
+/** One way to buy a product, from `GET /api/v1/purchases/offerings`. */
+export interface Offering {
+  provider: 'apple' | 'google' | 'razorpay';
+  /** The store's product id (App Store / Play) or the Razorpay plan id. */
+  sku: string;
+  kind: 'subscription' | 'lifetime';
+}
+
 /** Where the session token lives between launches. Each app supplies its own. */
 export interface TokenStore {
   read(): Promise<string | null>;
@@ -39,6 +47,17 @@ export interface AccountClientOptions {
   brand?: string;
   tokenStore: TokenStore;
   fetch?: typeof fetch;
+  /** Per-request deadline. Defaults to DEFAULT_TIMEOUT_MS. */
+  timeoutMs?: number;
+}
+
+export interface SignUpDetails {
+  email: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  /** Optional: an account without one signs in by emailed code. */
+  password?: string;
 }
 
 export class AccountApiError extends Error {
@@ -50,4 +69,24 @@ export class AccountApiError extends Error {
   get isAuthFailure(): boolean {
     return this.status === 401 || this.status === 403;
   }
+}
+
+/** CDS did not answer within the client's deadline. */
+export class AccountTimeoutError extends Error {
+  constructor() {
+    super('CyKrome is taking too long to answer. Try again in a moment.');
+    this.name = 'AccountTimeoutError';
+  }
+}
+
+/**
+ * What an app remembers about the account between launches, so Drift (and Drift Pro) keeps
+ * working with no connection. Ownerships carry their own expiry, so a lapsed plan still lapses
+ * offline.
+ */
+export interface AccountSnapshot {
+  user: CyKromeUser;
+  ownerships: Ownership[];
+  proProductId: string | null;
+  savedAt: number;
 }

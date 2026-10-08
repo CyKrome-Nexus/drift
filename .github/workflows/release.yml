@@ -1,0 +1,503 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to release (e.g. v0.1.0)"
+        required: true
+  push:
+    tags: ["v*"]
+
+# Nothing in this workflow writes to this repository.
+permissions:
+  contents: read
+
+concurrency:
+  # env context is not available here, so the expression is repeated
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  # Gate: refuse to build anything if the tag and source versions disagree.
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      # Releases come off main, at the end of feature -> dev -> qa -> main.
+      # A v* tag on any other commit would publish code that never went through
+      # that path.
+      - name: Verify the tag is on main
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags --quiet origin +refs/heads/main:refs/remotes/origin/main
+
+          sha=$(git rev-parse "${RELEASE_TAG}^{commit}")
+
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::$RELEASE_TAG ($(git rev-parse --short "$sha")) is not reachable from main."
+            echo "::error::Merge it to main first — feature -> dev -> qa -> main -> tag."
+            exit 1
+          fi
+
+          echo "$RELEASE_TAG is on main ($(git rev-parse --short "$sha"))"
+
+      - name: Verify tag matches the project version
+        id: check
+        run: |
+          set -euo pipefail
+
+          tag="$RELEASE_TAG"
+
+          case "$tag" in
+            v*) version="${tag#v}" ;;
+            *) echo "::error::tag '$tag' must start with 'v'"; exit 1 ;;
+          esac
+
+          # apps/desktop/package.json is the single source of truth for the desktop
+          # version; tauri.conf.json must defer to it rather than carry its own copy.
+          # (The phone app versions separately, through the stores.)
+          pkg=$(jq -r .version apps/desktop/package.json)
+          conf=$(jq -r .version apps/desktop/src-tauri/tauri.conf.json)
+
+          if [ "$pkg" != "$version" ]; then
+            echo "::error file=apps/desktop/package.json::version is '$pkg' but tag $tag implies '$version'"
+            exit 1
+          fi
+
+          if [ "$conf" != "../package.json" ]; then
+            echo "::error file=apps/desktop/src-tauri/tauri.conf.json::version must be '../package.json', got '$conf'"
+            exit 1
+          fi
+
+          # 1.0.0-beta.1 -> prerelease, 1.0.0 -> stable
+          case "$version" in
+            *-*) prerelease=true ;;
+            *) prerelease=false ;;
+          esac
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+
+          echo "Releasing Drift $version (prerelease=$prerelease)"
+
+      # Verify all required configuration before spending runner time building
+      # the four platforms.
+      - name: Verify the release configuration
+        env:
+          PUBLIC_RELEASE_REPO: ${{ vars.PUBLIC_RELEASE_REPO }}
+          HAS_SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+          HAS_SIGNING_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD != '' }}
+          HAS_APP_ID: ${{ vars.APP_ID != '' }}
+          HAS_APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY != '' }}
+        run: |
+          set -euo pipefail
+
+          fail=0
+
+          if [ "$HAS_SIGNING_KEY" != "true" ]; then
+            echo "::error::secret TAURI_SIGNING_PRIVATE_KEY is not set — updater artifacts cannot be signed"
+            fail=1
+          fi
+
+          if [ "$HAS_SIGNING_PASSWORD" != "true" ]; then
+            echo "::error::secret TAURI_SIGNING_PRIVATE_KEY_PASSWORD is not set — the signing key is passphrase-protected"
+            fail=1
+          fi
+
+          if [ "$HAS_APP_ID" != "true" ]; then
+            echo "::error::repository variable APP_ID is not set"
+            fail=1
+          fi
+
+          if [ "$HAS_APP_PRIVATE_KEY" != "true" ]; then
+            echo "::error::secret APP_PRIVATE_KEY is not set"
+            fail=1
+          fi
+
+          if [ -z "${PUBLIC_RELEASE_REPO:-}" ]; then
+            echo "::error::repository variable PUBLIC_RELEASE_REPO is not set"
+            fail=1
+          fi
+
+          # Also validates the updater endpoint and public key in tauri.conf.json.
+          node .github/scripts/set-updater-endpoint.mjs >/dev/null || fail=1
+
+          # Nothing built here, so undo the substitution rather than leave it lying around.
+          git checkout -- apps/desktop/src-tauri/tauri.conf.json
+
+          [ "$fail" -eq 0 ]
+
+      # Create a temporary GitHub App installation token for the Release Bot.
+      #
+      # The token is scoped specifically to the Drift-Release repository
+      # with Contents: write permission.
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: CyKrome-Nexus
+          repositories: Drift-Release
+          permission-contents: write
+
+      - name: Verify the Release Bot can access the release repository
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PUBLIC_REPO: ${{ vars.PUBLIC_RELEASE_REPO }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::GitHub App token was not created"
+            exit 1
+          fi
+
+          if [ -z "${PUBLIC_REPO:-}" ]; then
+            echo "::error::repository variable PUBLIC_RELEASE_REPO is not set"
+            exit 1
+          fi
+
+          if ! gh repo view "$PUBLIC_REPO" >/dev/null 2>&1; then
+            echo "::error::Release Bot cannot access $PUBLIC_REPO"
+            echo "::error::Check that the GitHub App is installed on Drift-Release"
+            echo "::error::Check that the App has Contents: Read and write permission"
+            exit 1
+          fi
+
+          echo "Release Bot can access $PUBLIC_REPO"
+
+      - name: Build release notes
+        run: |
+          set -euo pipefail
+
+          prev=$(git describe --tags --abbrev=0 "$RELEASE_TAG^" 2>/dev/null || true)
+
+          {
+            echo "## Drift ${{ steps.check.outputs.version }}"
+            echo
+
+            if [ -n "$prev" ]; then
+              echo "### Changes since $prev"
+              echo
+              git log --no-merges --pretty='- %s' "$prev..$RELEASE_TAG"
+            fi
+
+            echo
+            echo "### Downloads"
+            echo
+            echo "| Platform | File |"
+            echo "| --- | --- |"
+            echo "| macOS (Apple Silicon) | \`.dmg\` — \`aarch64\` |"
+            echo "| macOS (Intel) | \`.dmg\` — \`x64\` |"
+            echo "| Windows | \`.msi\` or \`-setup.exe\` |"
+            echo "| Linux | \`.AppImage\`, \`.deb\`, or \`.rpm\` |"
+            echo
+            echo "macOS and Linux can also install from the terminal:"
+            echo
+            echo "\`\`\`bash"
+            echo "curl -fsSL https://github.com/CyKrome-Nexus/Drift-Release/releases/latest/download/install.sh | bash"
+            echo "\`\`\`"
+            echo
+            echo "> **Live wallpapers play on macOS today.** The Windows and Linux builds run the"
+            echo "> full app; their wallpaper engines are on the way."
+            echo
+            echo "> **macOS first launch** — Drift is not notarised yet, so macOS"
+            echo "> will not open it on a double-click. Right-click the app ▸ **Open**,"
+            echo "> then **Open** again. Or run:"
+            echo '> `xattr -dr com.apple.quarantine /Applications/Drift.app`'
+          } > notes.md
+
+          cat notes.md
+
+      # The publish job has no checkout on purpose, so anything it needs from
+      # the source tree has to travel as an artifact.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: |
+            notes.md
+            .github/scripts/build-latest-json.mjs
+            scripts/install.sh
+            scripts/install-mac.sh
+            scripts/install-linux.sh
+          if-no-files-found: error
+
+  build:
+    needs: prepare
+
+    # One red platform must not produce a half-populated release.
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: macos-latest, target: aarch64-apple-darwin, args: "--target aarch64-apple-darwin" }
+          - { os: macos-latest, target: x86_64-apple-darwin, args: "--target x86_64-apple-darwin" }
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, args: "" }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, args: "" }
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Linux system deps
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+          key: ${{ matrix.target }}
+
+      - run: pnpm install --frozen-lockfile
+
+      # The updater endpoint is compiled into the binary, so it has to be resolved
+      # before the build rather than at publish time.
+      - name: Bake the updater endpoint
+        shell: bash
+        env:
+          PUBLIC_RELEASE_REPO: ${{ vars.PUBLIC_RELEASE_REPO }}
+        run: node .github/scripts/set-updater-endpoint.mjs
+
+      # Apple signing environment.
+      # If APPLE_CERTIFICATE is absent, use the ad-hoc identity.
+      - name: Apple signing environment
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "no APPLE_CERTIFICATE secret — bundling with the ad-hoc identity"
+            exit 0
+          fi
+
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+                   APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+            printf '%s<<__DRIFT_EOF__\n%s\n__DRIFT_EOF__\n' "$v" "${!v}" >> "$GITHUB_ENV"
+          done
+
+      - uses: tauri-apps/tauri-action@v0
+        id: tauri
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: pnpm tauri
+          args: ${{ matrix.args }}
+
+      - name: Stage artifacts
+        shell: bash
+        env:
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+          TARGET: ${{ matrix.target }}
+        run: node .github/scripts/collect-artifacts.mjs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.target }}
+          path: staged/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+
+    steps:
+      # Deliberately no checkout: this job must never be able to push source
+      # into the public repository.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+
+      # Consumes the per-platform updater fragments and deletes them, so the only
+      # updater file left for publication is latest.json itself.
+      - name: Build the updater manifest
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PUBLIC_REPO: ${{ vars.PUBLIC_RELEASE_REPO }}
+          TAG: ${{ env.RELEASE_TAG }}
+          NOTES_FILE: notes.md
+        run: node .github/scripts/build-latest-json.mjs
+
+      - name: Stage installer scripts
+        run: |
+          cp scripts/install.sh dist/install.sh
+          cp scripts/install-mac.sh dist/install-mac.sh
+          cp scripts/install-linux.sh dist/install-linux.sh
+
+      - name: Sanity-check the payload
+        run: |
+          set -euo pipefail
+
+          ls -la dist
+
+          # Assert the expected artifact shape.
+          bad=$(find dist -type f ! \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' \
+            -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \
+            -o -name '*.sig' -o -name '*.tar.gz' -o -name '*.zip' \
+            -o -name '*.sh' -o -name 'latest.json' \) -print)
+
+          if [ -n "$bad" ]; then
+            echo "::error::unexpected files staged for publication:"
+            echo "$bad"
+            exit 1
+          fi
+
+          [ -n "$(ls -A dist)" ] || {
+            echo "::error::no artifacts to publish"
+            exit 1
+          }
+
+          # An installed copy resolves updates through latest.json alone.
+          # Publishing installers without it silently strands existing installations.
+          [ -f dist/latest.json ] || {
+            echo "::error::latest.json was not produced"
+            exit 1
+          }
+
+          for key in darwin-aarch64 darwin-x86_64 linux-x86_64 windows-x86_64; do
+            grep -q "\"$key\"" dist/latest.json \
+              || {
+                echo "::error::latest.json is missing platform $key"
+                exit 1
+              }
+          done
+
+      # Create a fresh temporary installation token for the Release Bot.
+      #
+      # The token is scoped specifically to the Drift-Release repository and
+      # Contents: write permission.
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: CyKrome-Nexus
+          repositories: Drift-Release
+          permission-contents: write
+
+      - name: Verify the Release Bot can access the release repository
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PUBLIC_REPO: ${{ vars.PUBLIC_RELEASE_REPO }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::GitHub App token was not created"
+            exit 1
+          fi
+
+          if [ -z "${PUBLIC_REPO:-}" ]; then
+            echo "::error::repository variable PUBLIC_RELEASE_REPO is not set"
+            exit 1
+          fi
+
+          if ! gh repo view "$PUBLIC_REPO" >/dev/null 2>&1; then
+            echo "::error::Release Bot cannot access $PUBLIC_REPO"
+            echo "::error::Check that the GitHub App is installed on Drift-Release"
+            echo "::error::Check that the App has Contents: Read and write permission"
+            exit 1
+          fi
+
+          echo "Release Bot can access $PUBLIC_REPO"
+
+      - name: Publish release to the public repository
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PUBLIC_REPO: ${{ vars.PUBLIC_RELEASE_REPO }}
+          TAG: ${{ env.RELEASE_TAG }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${PUBLIC_REPO:-}" ]; then
+            echo "::error::repository variable PUBLIC_RELEASE_REPO is not set (expected owner/repo)"
+            exit 1
+          fi
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::GitHub App token was not created"
+            exit 1
+          fi
+
+          if ! gh repo view "$PUBLIC_REPO" >/dev/null 2>&1; then
+            echo "::error::Release Bot cannot access $PUBLIC_REPO"
+            echo "::error::Check the GitHub App installation and Contents: Read and write permission"
+            exit 1
+          fi
+
+          # A GitHub failure can leave a hidden draft behind. It is safe to
+          # rebuild that draft under the same tag; a public release is immutable.
+          if gh release view "$TAG" --repo "$PUBLIC_REPO" >/dev/null 2>&1; then
+            draft=$(gh release view "$TAG" --repo "$PUBLIC_REPO" --json isDraft --jq '.isDraft')
+            if [ "$draft" = "false" ]; then
+              echo "::notice::release $TAG is already published; nothing to retry"
+              exit 0
+            fi
+
+            echo "::notice::removing incomplete draft release $TAG before rebuilding it"
+            # Preserve the tag: it identifies the exact source revision being retried.
+            gh release delete "$TAG" --repo "$PUBLIC_REPO" --yes
+          fi
+
+          # Created as a draft with every asset attached, then flipped visible in
+          # one step, so users never see a release that is missing platforms.
+          gh release create "$TAG" \
+            --repo "$PUBLIC_REPO" \
+            --title "Drift $VERSION" \
+            --notes-file notes.md \
+            --draft \
+            $( [ "$PRERELEASE" = "true" ] && echo --prerelease ) \
+            dist/*
+
+          gh release edit "$TAG" \
+            --repo "$PUBLIC_REPO" \
+            --draft=false
+
+          echo "Published: $(gh release view "$TAG" --repo "$PUBLIC_REPO" --json url -q .url)"

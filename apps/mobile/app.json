@@ -10,7 +10,10 @@
     "backgroundColor": "#161826",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.cykrome.drift"
+      "bundleIdentifier": "com.cykrome.drift",
+      "infoPlist": {
+        "NSPhotoLibraryAddUsageDescription": "Drift saves wallpapers to your library as Live Photos so you can set them in Settings › Wallpaper."
+      }
     },
     "android": {
       "package": "com.cykrome.drift",
@@ -37,7 +40,16 @@
           "imageWidth": 200,
           "backgroundColor": "#161826"
         }
-      ]
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#9184D9"
+        }
+      ],
+      "./plugins/withSpaceSafeBundlePhase",
+      "expo-iap"
     ],
     "experiments": {
       "typedRoutes": true

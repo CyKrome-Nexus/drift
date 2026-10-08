@@ -22,6 +22,8 @@ read from an account, what About says — lives in a package, so the apps differ
 pnpm install
 pnpm test                 # packages and both apps (62 tests)
 pnpm typecheck
+pnpm verify               # everything CI checks, incl. cargo test
+pnpm hooks                # once per clone: block direct pushes to dev/qa/main
 
 pnpm dev:desktop          # tauri dev (Vite on :1420)
 pnpm dev:mobile           # expo start; press i / a
@@ -32,11 +34,15 @@ work; window controls, updates and the engine no-op there.
 
 Copy `apps/desktop/.env.example` → `.env` and `apps/mobile/.env.example` → `.env` to configure.
 
-## CI
+## Branches, CI and releases
 
-`.github/workflows/ci.yml` runs on every push to `main` and every pull request: tests and
-typecheck, a desktop build (`tauri build --no-bundle`) on macOS, Windows and Linux, and Metro
-bundles of the phone app for iOS and Android.
+Same flow as Aperture: feature branch → `dev` → `qa` → `main` → tag `vX.Y.Z` → release.
+Every hop is a pull request; run `pnpm hooks` once per clone so git refuses direct pushes
+to the three branches. CI (`pnpm verify`, desktop builds, phone bundles) runs on every pull
+request. A `v*` tag on `main` builds and signs the desktop app for macOS, Windows and Linux
+and publishes it to the public
+[Drift-Release](https://github.com/CyKrome-Nexus/Drift-Release) repo.
+Everything — setup, secrets, the signing key — is in **[docs/releasing.md](docs/releasing.md)**.
 
 ## CyKrome Account
 

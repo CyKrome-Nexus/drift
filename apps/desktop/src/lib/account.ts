@@ -1,75 +1,97 @@
-// CyKrome Account for the desktop app: one client, and the actions the Account screen calls.
+// CyKrome Account for the desktop app: the shared session (packages/account/src/session.ts) wired
+// to this app's store, plus the Pro gates and the online checkout.
 
-import { AccountApiError, AccountClient, FREE_PLAN, resolvePlan, type TokenStore } from '@drift/account';
-import { canApply, canCreateList, type ProFeature, type Wallpaper } from '@drift/core';
-import { getState, setPlan, setState, showUpgrade } from './store';
+import { AccountClient, createSession, messageOf, type AccountHost, type TokenStore } from '@drift/account';
+import { LINKS, canApply, canCreateList, type ProFeature, type Wallpaper } from '@drift/core';
+import { invoke } from '@tauri-apps/api/core';
+import { inTauri, openExternal } from './platform';
+import { getState, setPlan, setState, showUpgrade, subscribe, toast } from './store';
+
+export { messageOf };
 
 const BASE_URL = import.meta.env.VITE_CDS_BASE_URL || 'https://api.cykrome.com';
+/** Optional: normally the Drift Pro product is found in the catalog by its slug. */
 const PRO_PRODUCT_ID = import.meta.env.VITE_DRIFT_PRO_PRODUCT_ID || '';
 
-const TOKEN_KEY = 'drift.cykrome-token';
+/** Where the token lived before it moved to the OS credential store. */
+const LEGACY_TOKEN_KEY = 'drift.cykrome-token';
+
+const browserStorage = {
+  read: async (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
+  write: async (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* not remembered */ } },
+  remove: async (k: string) => { try { localStorage.removeItem(k); } catch { /* nothing to clear */ } },
+};
 
 /**
- * The webview's localStorage, which Tauri keeps per app identifier on disk. It is the same
- * trade-off Nexus Authenticator makes; moving the token to the OS keychain is a later step.
+ * The OS credential store (Keychain, Credential Manager, Secret Service) via src-tauri/secrets.rs.
+ * A token left in webview storage by an older build is moved across on first read. Under plain
+ * `vite` there is no keychain, so the browser preview keeps using localStorage.
  */
-const tokenStore: TokenStore = {
-  async read() { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } },
-  async write(t) { localStorage.setItem(TOKEN_KEY, t); },
-  async clear() { try { localStorage.removeItem(TOKEN_KEY); } catch { /* nothing to clear */ } },
-};
+const tokenStore: TokenStore = inTauri
+  ? {
+      async read() {
+        const token = await invoke<string | null>('session_token_get');
+        if (token) return token;
+        const legacy = await browserStorage.read(LEGACY_TOKEN_KEY);
+        if (!legacy) return null;
+        await invoke('session_token_set', { token: legacy });
+        await browserStorage.remove(LEGACY_TOKEN_KEY);
+        return legacy;
+      },
+      write: (token) => invoke('session_token_set', { token }),
+      async clear() {
+        await invoke('session_token_clear');
+        await browserStorage.remove(LEGACY_TOKEN_KEY);
+      },
+    }
+  : {
+      read: () => browserStorage.read(LEGACY_TOKEN_KEY),
+      write: (t) => browserStorage.write(LEGACY_TOKEN_KEY, t),
+      clear: () => browserStorage.remove(LEGACY_TOKEN_KEY),
+    };
 
 export const account = new AccountClient({ baseUrl: BASE_URL, brand: 'nexus', tokenStore });
 
-export const proProductConfigured = PRO_PRODUCT_ID !== '';
+let lastLibrary = { favs: getState().favs, lists: getState().lists, following: getState().following };
 
-export function messageOf(err: unknown): string {
-  if (err instanceof AccountApiError) return err.message;
-  if (err instanceof TypeError) return 'Could not reach CyKrome. Check your connection.';
-  return err instanceof Error ? err.message : String(err);
-}
+const host: AccountHost = {
+  account: () => getState().account,
+  setAccount: (patch) => setState((s) => ({ account: { ...s.account, ...patch } })),
+  setPlan,
+  library: () => ({ favs: getState().favs, lists: getState().lists, following: getState().following }),
+  setLibrary: ({ favs, lists, following }) => setState({ favs, lists, following }),
+  onLibraryChange: (listener) =>
+    subscribe(() => {
+      const { favs, lists, following } = getState();
+      if (favs === lastLibrary.favs && lists === lastLibrary.lists && following === lastLibrary.following) return;
+      lastLibrary = { favs, lists, following };
+      listener();
+    }),
+  storage: browserStorage,
+};
 
-export async function refreshPlan(): Promise<void> {
+export const session = createSession(account, host, { proProductId: PRO_PRODUCT_ID });
+
+export const {
+  restore: restoreSession,
+  refreshPlan,
+  syncNow,
+  signOut,
+  signInWithPassword,
+  requestCode,
+  signInWithCode,
+  signUp,
+} = session;
+
+/** Opens Razorpay's payment page for Drift Pro, or the Pro web page if online purchase is off. */
+export async function buyPro(): Promise<void> {
   try {
-    setPlan(resolvePlan(await account.ownerships(), PRO_PRODUCT_ID));
+    await openExternal(await session.checkoutUrl());
+    toast('Finish in your browser — Drift updates when you come back', 'info');
   } catch (err) {
-    if (err instanceof AccountApiError && err.isAuthFailure) return void (await signOut());
-    // Keep the last known plan; a flaky network should not downgrade anyone mid-session.
-    setState((s) => ({ account: { ...s.account, planError: messageOf(err) } }));
+    console.warn('[account] checkout unavailable, opening the Pro page', messageOf(err));
+    await openExternal(LINKS.pro);
   }
-}
-
-export async function restoreSession(): Promise<void> {
-  try {
-    const user = await account.restore();
-    setState((s) => ({ account: { ...s.account, status: user ? 'signedIn' : 'signedOut', user } }));
-    if (user) await refreshPlan();
-  } catch (err) {
-    // Offline at launch: stay signed out for this run, but keep the token for the next one.
-    setState((s) => ({ account: { ...s.account, status: 'signedOut', planError: messageOf(err) } }));
-  }
-}
-
-export async function signInWithPassword(email: string, password: string): Promise<void> {
-  const { user } = await account.signInWithPassword(email, password);
-  setState((s) => ({ account: { ...s.account, status: 'signedIn', user } }));
-  await refreshPlan();
-}
-
-export async function requestCode(email: string): Promise<void> {
-  await account.requestCode(email);
-}
-
-export async function signInWithCode(email: string, code: string): Promise<void> {
-  const { user } = await account.signInWithCode(email, code);
-  setState((s) => ({ account: { ...s.account, status: 'signedIn', user } }));
-  await refreshPlan();
-}
-
-export async function signOut(): Promise<void> {
-  await account.signOut();
-  setState((s) => ({ account: { ...s.account, status: 'signedOut', user: null } }));
-  setPlan(FREE_PLAN);
 }
 
 // ---- gates ----

@@ -1,0 +1,40 @@
+#!/bin/sh
+# Blocks direct pushes to the long-lived branches. Tags are allowed, so the
+# release flow (git push origin v1.2.3) still works.
+#
+# ponytail: client-side only — bypassable with --no-verify and not enforced for
+# anyone who hasn't run `git config core.hooksPath .githooks`. Replace with a
+# GitHub ruleset once the org is on a paid plan; see docs/releasing.md.
+
+protected="main qa dev"
+status=0
+
+# stdin: <local ref> <local sha> <remote ref> <remote sha>
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  case "$remote_ref" in
+    refs/heads/*) branch="${remote_ref#refs/heads/}" ;;
+    *) continue ;;
+  esac
+
+  for p in $protected; do
+    if [ "$branch" = "$p" ]; then
+      echo "pre-push: refusing to push directly to '$branch'." >&2
+      status=1
+    fi
+  done
+done
+
+if [ "$status" -ne 0 ]; then
+  cat >&2 <<'EOF'
+
+Open a pull request instead:
+
+  git switch -c my-change
+  git push -u origin my-change
+  gh pr create --base dev
+
+Override (only when you mean it): git push --no-verify
+EOF
+fi
+
+exit "$status"

@@ -10,7 +10,9 @@
     "build:desktop": "pnpm --filter @drift/desktop tauri build",
     "dev:mobile": "pnpm --filter @drift/mobile start",
     "ios": "pnpm --filter @drift/mobile ios",
-    "android": "pnpm --filter @drift/mobile android"
+    "android": "pnpm --filter @drift/mobile android",
+    "verify": "pnpm test && pnpm typecheck && pnpm --filter @drift/desktop build && node .github/scripts/collect-artifacts.mjs --selfcheck && cd apps/desktop/src-tauri && cargo test",
+    "hooks": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

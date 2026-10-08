@@ -7,11 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { art, type Wallpaper } from '@drift/core';
-
-/** How much larger than the frame the art is drawn, as in the design's background-size. */
-const OVERSCAN_X = 2.2;
-const OVERSCAN_Y = 1.6;
-const DRIFT_MS = 14000;
+import { DRIFT_MS, OVERSCAN_X, OVERSCAN_Y } from '../lib/motion';
 
 function ArtSvg({ w, width, height }: { w: Wallpaper; width: number; height: number }) {
   const { layers, base } = art(w, 'portrait');

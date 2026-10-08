@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shown in the system's live wallpaper list: Nocturne night with the accent glow. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item>
+    <shape android:shape="rectangle">
+      <gradient android:angle="270" android:startColor="#2A2645" android:endColor="#161826" />
+    </shape>
+  </item>
+  <item>
+    <shape android:shape="rectangle">
+      <gradient android:type="radial" android:gradientRadius="60%p" android:centerX="0.3" android:centerY="0.25"
+        android:startColor="#B39184D9" android:endColor="#009184D9" />
+    </shape>
+  </item>
+</layer-list>
