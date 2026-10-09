@@ -162,9 +162,9 @@ export function AboutSection() {
           <div><dt>Version</dt><dd className="mono">{APP_VERSION}</dd></div>
           <div><dt>Platform</dt><dd className="mono">{platform} · {info?.arch ?? '…'}</dd></div>
           {info?.engine ? (
-            <div><dt>Wallpaper engine</dt><dd className="mono">Desktop layer · {platform}</dd><dd className="note">One window per display, behind your icons and on every Space</dd></div>
+            <div><dt>Wallpaper engine</dt><dd className="mono">Desktop layer · {platform}</dd><dd className="note">One window per display, behind your icons{platform === 'macOS' ? ' and on every Space' : ''}</dd></div>
           ) : (
-            <div><dt>Wallpaper engine</dt><dd className="mono">Preview</dd><dd className="note">The native desktop layer is not built for {platform} yet; loops play inside Drift only</dd></div>
+            <div><dt>Wallpaper engine</dt><dd className="mono">Preview</dd><dd className="note">{info && info.arch !== 'browser' ? 'This desktop doesn’t let apps draw behind it' : 'The native desktop layer runs in the desktop app'}; loops play inside Drift only</dd></div>
           )}
           <div><dt>Shell</dt><dd className="mono">{inTauri ? `Tauri ${info?.tauri ?? '2'}` : 'Browser preview'}</dd><dd className="note">Native window, drawn chrome and system integration</dd></div>
           <div><dt>Interface</dt><dd className="mono">React 19</dd><dd className="note">Shares its catalog, plans and account client with Drift for phone</dd></div>

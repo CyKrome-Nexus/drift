@@ -20,6 +20,8 @@ html, body { background: transparent; overflow: hidden; }
 .art { position: absolute; inset: 0; background-size: 170% 170%; }
 .art.is-moving { animation: wpFade 0.9s ease, wpDrift 16s ease-in-out infinite alternate; }
 .art.is-paused { animation-play-state: paused; }
+/* The desktop wallpaper page draws its own frames (src/wallpaper.tsx). */
+.wallpaper-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; animation: wpFade 0.9s ease; }
 
 /* — traffic lights — */
 .lights {

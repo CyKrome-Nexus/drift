@@ -27,6 +27,31 @@ tauri-plugin-process = "2"
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSWindow", "NSResponder", "NSGraphics"] }
 
+# Wallpaper engine on Windows: the window goes behind the desktop icons (`WorkerW`), plus the
+# power, fullscreen and CPU checks and the lock-screen image. Same version Tauri links.
+[target.'cfg(target_os = "windows")'.dependencies.windows]
+version = "0.62"
+features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Power",
+  "Win32_System_Threading",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+  "Foundation",
+  "Storage",
+  "Storage_Streams",
+  "System_UserProfile",
+]
+
+# Wallpaper engine on Linux: GTK for the desktop window (same version Tauri links), Xlib loaded
+# at runtime for the fullscreen check, and gtk-layer-shell loaded at runtime on Wayland, so
+# neither is a build dependency.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+x11-dl = "2.21"
+libloading = "0.7"
+
 # The session token lives in the OS credential store (src/secrets.rs). keyring 3: version 4 is a
 # different, split-crate API. Linux uses the pure-Rust Secret Service client, so the build needs
 # no libdbus.

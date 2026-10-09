@@ -1,7 +1,7 @@
 mod engine;
 mod secrets;
 
-use engine::{ApplyOutcome, ApplyRequest, EngineState, Running};
+use engine::{ApplyOutcome, ApplyRequest, Display, EngineState, Playback, Running};
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -17,6 +17,26 @@ async fn apply_wallpaper(app: AppHandle, request: ApplyRequest) -> Result<ApplyO
 #[tauri::command]
 async fn stop_wallpaper(app: AppHandle) {
     engine::stop(&app, &app.state::<EngineState>());
+}
+
+#[tauri::command]
+async fn list_displays(app: AppHandle) -> Result<Vec<Display>, String> {
+    engine::list_displays(&app)
+}
+
+/// Frame rate, quality and the pause rules. Sent at startup and on every change.
+#[tauri::command]
+async fn set_playback(app: AppHandle, playback: Playback) {
+    engine::set_playback(&app, &app.state::<EngineState>(), playback);
+}
+
+/// The body is the PNG itself (raw bytes, not JSON).
+#[tauri::command]
+async fn set_lock_screen(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result<(), String> {
+    match request.body() {
+        tauri::ipc::InvokeBody::Raw(png) => engine::set_lock_screen(&app, png.clone()),
+        _ => Err("expected the image as raw bytes".into()),
+    }
 }
 
 /// Settings › General › "Show in system tray".
@@ -40,11 +60,11 @@ struct SystemInfo {
     arch: &'static str,
     family: &'static str,
     tauri: &'static str,
-    /// Whether this OS has a working wallpaper engine.
+    /// Whether this system has a working wallpaper engine.
     engine: bool,
 }
 
-/// What Settings › About and "Copy diagnostics" show. Compile-time facts only.
+/// What Settings › About and "Copy diagnostics" show.
 #[tauri::command]
 fn system_info() -> SystemInfo {
     SystemInfo {
@@ -52,7 +72,8 @@ fn system_info() -> SystemInfo {
         arch: std::env::consts::ARCH,
         family: std::env::consts::FAMILY,
         tauri: tauri::VERSION,
-        engine: cfg!(target_os = "macos"),
+        // Checked at run time: on Linux it depends on X11 vs Wayland and the compositor.
+        engine: engine::supported(),
     }
 }
 
@@ -100,10 +121,18 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 
     let mut tray = TrayIconBuilder::with_id("drift").tooltip("Drift").menu(&menu).on_menu_event(|app, event| match event.id().as_ref() {
         "open" => show_main(app),
-        "stop" => engine::stop(app, &app.state::<EngineState>()),
+        // Off the main thread: an apply in progress may be waiting on the main thread to build
+        // its window, and stopping waits for that apply.
+        "stop" => {
+            let app = app.clone();
+            std::thread::spawn(move || engine::stop(&app, &app.state::<EngineState>()));
+        }
         "quit" => {
-            engine::stop(app, &app.state::<EngineState>());
-            app.exit(0);
+            let app = app.clone();
+            std::thread::spawn(move || {
+                engine::stop(&app, &app.state::<EngineState>());
+                app.exit(0);
+            });
         }
         _ => {}
     });
@@ -130,6 +159,7 @@ pub fn run() {
     let app = builder
         .setup(|app| {
             build_tray(app.handle())?;
+            engine::start_monitor(app.handle().clone());
             if let Some(main) = app.get_webview_window("main") {
                 fit_to_display(&main);
                 // Launched at login: stay out of the way. The webview still loads and resumes the
@@ -154,6 +184,9 @@ pub fn run() {
             apply_wallpaper,
             stop_wallpaper,
             current_wallpaper,
+            list_displays,
+            set_playback,
+            set_lock_screen,
             set_tray_visible,
             system_info,
             secrets::session_token_get,

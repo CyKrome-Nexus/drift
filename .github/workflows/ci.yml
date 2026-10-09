@@ -57,9 +57,9 @@ jobs:
 
   desktop:
     name: Desktop build (${{ matrix.os }})
-    # The wallpaper engine is platform code (AppKit on macOS, more to come), so each
-    # OS has to compile here rather than first fail at tag time. Linux is covered by
-    # `cargo test` in Verify.
+    # The wallpaper engine is platform code (AppKit on macOS, WorkerW on Windows, GTK on
+    # Linux), so each OS has to compile here rather than first fail at tag time. Linux is
+    # covered by `cargo test` in Verify.
     strategy:
       fail-fast: false
       matrix:

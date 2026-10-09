@@ -5,7 +5,7 @@ import { TrafficLights } from './components/TrafficLights';
 import { UpgradeDialog } from './components/UpgradeDialog';
 import { refreshPlan, restoreSession } from './lib/account';
 import { connectEngine } from './lib/actions';
-import { syncSystemSettings } from './lib/platform';
+import { setPlayback, syncSystemSettings } from './lib/platform';
 import { getState, useApp } from './lib/store';
 import { checkForUpdates, downloadAndInstall } from './lib/updater';
 import { Browse } from './screens/Browse';
@@ -62,6 +62,16 @@ export function App() {
   useEffect(() => {
     syncSystemSettings({ launchAtLogin, showInTray }).catch((err) => console.warn('[system] could not apply settings', err));
   }, [launchAtLogin, showInTray]);
+
+  // Frame rate, quality and the pause rules reach running wallpapers as soon as they change.
+  const fps = useApp((s) => s.settings.fps);
+  const quality = useApp((s) => s.settings.quality);
+  const pauseOnBattery = useApp((s) => s.settings.pauseOnBattery);
+  const pauseFullscreen = useApp((s) => s.settings.pauseFullscreen);
+  const pauseHighCpu = useApp((s) => s.settings.pauseHighCpu);
+  useEffect(() => {
+    setPlayback({ fps, quality, pauseOnBattery, pauseFullscreen, pauseHighCpu }).catch((err) => console.warn('[engine] could not apply playback settings', err));
+  }, [fps, quality, pauseOnBattery, pauseFullscreen, pauseHighCpu]);
 
   // Home and Browse stay mounted under the full-window overlays, so closing one returns to the
   // same scroll position.

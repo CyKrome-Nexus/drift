@@ -26,7 +26,7 @@ export interface SystemInfo {
   arch: string;
   family: string;
   tauri: string;
-  /** Whether this OS has a working wallpaper engine. */
+  /** Whether this system has a working wallpaper engine. */
   engine: boolean;
 }
 
@@ -47,6 +47,8 @@ export interface ApplyRequest {
   displays: string;
   fps: string;
   muted: boolean;
+  /** "Per display" only: the display that gets this wallpaper (an id from `listDisplays`); none means all. */
+  display?: string | null;
 }
 
 export interface ApplyOutcome {
@@ -72,9 +74,63 @@ export async function stopWallpaper(): Promise<void> {
   if (inTauri) await invoke('stop_wallpaper');
 }
 
-/** What the engine is showing, and when its loop started (epoch ms) — the shared playback clock. */
+/** One display's wallpaper and its own loop clock. */
+export interface Assignment {
+  display: string;
+  wallpaperId: number;
+  startedAtMs: number;
+}
+
+/**
+ * What the engine is showing, and when its loop started (epoch ms) — the shared playback clock.
+ * With "Per display" each display has its own wallpaper and clock in `assignments`; the
+ * top-level fields are the one applied last.
+ */
 export interface Running extends ApplyRequest {
   startedAtMs: number;
+  assignments: Assignment[];
+  /** Why playback is paused (battery, a fullscreen app, a busy CPU), or null while it plays. */
+  paused: string | null;
+}
+
+/** A connected display, in physical pixels. Main display first. */
+export interface Display {
+  id: string;
+  name: string;
+  primary: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  scale: number;
+}
+
+/** "Main" for the main display, "Display 2", "Display 3"… for the rest, in the engine's order. */
+export function displayLabel(d: Display, index: number): string {
+  return d.primary ? 'Main' : `Display ${index + 1}`;
+}
+
+export async function listDisplays(): Promise<Display[]> {
+  return inTauri ? invoke<Display[]>('list_displays') : [];
+}
+
+/** Playback settings the engine applies to running wallpapers straight away. */
+export interface Playback {
+  fps: string;
+  quality: string;
+  pauseOnBattery: boolean;
+  pauseFullscreen: boolean;
+  pauseHighCpu: boolean;
+}
+
+export async function setPlayback(playback: Playback): Promise<void> {
+  if (inTauri) await invoke('set_playback', { playback });
+}
+
+/** Set the lock screen to a still PNG. Windows only; elsewhere the engine says why it can't. */
+export async function setLockScreen(png: Uint8Array): Promise<void> {
+  if (!inTauri) throw new Error('Browser preview — run the desktop app to set the lock screen');
+  await invoke('set_lock_screen', png);
 }
 
 export async function currentWallpaper(): Promise<Running | null> {

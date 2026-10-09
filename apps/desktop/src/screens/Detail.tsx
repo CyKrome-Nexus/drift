@@ -25,9 +25,51 @@ import { moreLike, wallpaper, type DesktopSettings } from '@drift/core';
 import { Art } from '../components/Art';
 import { requirePro } from '../lib/account';
 import { apply, download } from '../lib/actions';
-import { back, openDetail, setState, toast, toggleFav, updateSettings, useApp } from '../lib/store';
+import { displayLabel, listDisplays, type Display } from '../lib/platform';
+import { back, liveSince as liveSinceOf, openDetail, setState, toast, toggleFav, updateSettings, useApp } from '../lib/store';
 
 const TARGETS: Array<DesktopSettings['applyTarget']> = ['Desktop', 'Lock screen', 'Both'];
+
+/**
+ * Which displays an apply reaches. With "Per display" and more than one screen, a choice of
+ * all of them or one; otherwise a label for what "Displays" in Settings says.
+ */
+function DisplayPicker({ value, onChange }: { value: string | null; onChange: (id: string | null) => void }) {
+  const mode = useApp((s) => s.settings.monitors);
+  const [displays, setDisplays] = useState<Display[]>([]);
+
+  useEffect(() => {
+    if (mode !== 'Per display') return;
+    let live = true;
+    listDisplays().then((d) => live && setDisplays(d)).catch(() => live && setDisplays([]));
+    return () => {
+      live = false;
+    };
+  }, [mode]);
+
+  // A display unplugged while the picker was open falls back to all of them.
+  useEffect(() => {
+    if (value && displays.length && !displays.some((d) => d.id === value)) onChange(null);
+  }, [displays, value, onChange]);
+
+  if (mode !== 'Per display' || displays.length < 2) {
+    return (
+      <span style={{ fontSize: 12, color: 'var(--color-neutral-400)', display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
+        <Monitor />{mode === 'Span' ? 'Spanned across displays' : 'All displays'}
+      </span>
+    );
+  }
+  return (
+    <div className="seg-glass glass" role="radiogroup" aria-label="Display">
+      <button type="button" className="seg-opt-btn" aria-pressed={value === null} onClick={() => onChange(null)}>All</button>
+      {displays.map((d, i) => (
+        <button key={d.id} type="button" className="seg-opt-btn" aria-pressed={value === d.id} title={`${d.width}×${d.height}`} onClick={() => onChange(d.id)}>
+          {displayLabel(d, i)}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function ListPopover({ id, onClose }: { id: number; onClose: () => void }) {
   const lists = useApp((s) => s.lists);
@@ -98,7 +140,8 @@ export function Detail({ id }: { id: number }) {
   const [paused, setPaused] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   // When this is the wallpaper on the desktop, the preview plays in step with it.
-  const liveSince = useApp((s) => (s.current?.id === id ? s.current.startedAtMs : undefined));
+  const liveSince = useApp((s) => liveSinceOf(s, id));
+  const [display, setDisplay] = useState<string | null>(null);
   const [rejoin, setRejoin] = useState(0);
   const locked = w.tier === 'pro' && !isPro;
 
@@ -163,12 +206,10 @@ export function Detail({ id }: { id: number }) {
               <button key={t} type="button" className="seg-opt-btn" aria-pressed={target === t} onClick={() => updateSettings({ applyTarget: t })}>{t}</button>
             ))}
           </div>
-          <span style={{ fontSize: 12, color: 'var(--color-neutral-400)', display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
-            <Monitor />All displays
-          </span>
+          <DisplayPicker value={display} onChange={setDisplay} />
         </div>
         <div style={{ display: 'flex', gap: 8, position: 'relative' }}>
-          <button type="button" className="btn btn-glass-accent" style={{ padding: '10px 20px', fontSize: 14 }} onClick={() => void apply(w, target)}>
+          <button type="button" className="btn btn-glass-accent" style={{ padding: '10px 20px', fontSize: 14 }} onClick={() => void apply(w, target, display)}>
             {locked ? <CrownSimple size={17} weight="fill" /> : <MonitorPlay size={17} />}
             {locked ? 'Unlock with Pro' : 'Apply wallpaper'}
           </button>

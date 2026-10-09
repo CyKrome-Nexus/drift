@@ -10,7 +10,7 @@ import {
   type ProFeature,
 } from '@drift/core';
 import { INITIAL_ACCOUNT, type AccountState, type PlanState } from '@drift/account';
-import type { ApplyRequest } from './platform';
+import type { ApplyRequest, Assignment } from './platform';
 
 export type Section = 'General' | 'Playback' | 'Performance' | 'Displays' | 'Library & storage' | 'Account' | 'About';
 export type BrowseTab = 'Discover' | 'Library' | 'Favourites';
@@ -32,6 +32,23 @@ export interface UpdatePrefs {
   checkOnStartup: boolean;
 }
 
+/** What the engine is showing. Set only from the engine. */
+export interface Current {
+  /** The wallpaper applied last, and when its loop started. */
+  id: number;
+  startedAtMs: number;
+  /** What each display shows, each with its own loop clock ("Per display" can differ). */
+  displays: Assignment[];
+  /** Why playback is paused (battery, fullscreen app, CPU), or null while it plays. */
+  paused: string | null;
+}
+
+/** A display's wallpaper, kept for "Resume last wallpaper on startup" with "Per display". */
+export interface DisplayChoice {
+  display: string;
+  wallpaperId: number;
+}
+
 export interface AppState {
   view: View;
   query: string;
@@ -45,9 +62,11 @@ export interface AppState {
   account: AccountState;
   upgrade: { open: boolean; feature: ProFeature | null };
   /** The wallpaper the engine is showing right now, and when its loop started. Set only from the engine. */
-  current: { id: number; startedAtMs: number } | null;
+  current: Current | null;
   /** The last wallpaper applied, kept across launches for "Resume last wallpaper on startup". */
   lastApplied: ApplyRequest | null;
+  /** Each display's wallpaper the last time "Per display" ran, for the same. */
+  lastDisplays: DisplayChoice[];
 }
 
 const STORAGE_KEY = 'drift.desktop.v1';
@@ -59,6 +78,7 @@ interface Persisted {
   settings: DesktopSettings;
   updatePrefs: UpdatePrefs;
   lastApplied: ApplyRequest | null;
+  lastDisplays: DisplayChoice[];
 }
 
 const DEFAULT_UPDATE_PREFS: UpdatePrefs = { mode: 'notify', checkOnStartup: true };
@@ -77,6 +97,9 @@ function load(): Persisted {
     settings: hydrate(raw.settings, DEFAULT_DESKTOP_SETTINGS),
     updatePrefs: hydrate(raw.updatePrefs, DEFAULT_UPDATE_PREFS),
     lastApplied: raw.lastApplied && typeof raw.lastApplied.wallpaperId === 'number' ? raw.lastApplied : null,
+    lastDisplays: Array.isArray(raw.lastDisplays)
+      ? raw.lastDisplays.filter((d) => typeof d?.display === 'string' && typeof d?.wallpaperId === 'number')
+      : [],
   };
 }
 
@@ -92,6 +115,8 @@ let state: AppState = {
   current: null,
 };
 
+const PERSISTED_KEYS: ReadonlyArray<keyof Persisted> = ['favs', 'lists', 'following', 'settings', 'updatePrefs', 'lastApplied', 'lastDisplays'];
+
 const listeners = new Set<() => void>();
 
 export function getState(): AppState {
@@ -101,10 +126,10 @@ export function getState(): AppState {
 export function setState(patch: Partial<AppState> | ((s: AppState) => Partial<AppState>)): void {
   const next = typeof patch === 'function' ? patch(state) : patch;
   state = { ...state, ...next };
-  if ('favs' in next || 'lists' in next || 'following' in next || 'settings' in next || 'updatePrefs' in next || 'lastApplied' in next) {
+  if (PERSISTED_KEYS.some((k) => k in next)) {
     try {
-      const { favs, lists, following, settings, updatePrefs, lastApplied } = state;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ favs, lists, following, settings, updatePrefs, lastApplied } satisfies Persisted));
+      const { favs, lists, following, settings, updatePrefs, lastApplied, lastDisplays } = state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ favs, lists, following, settings, updatePrefs, lastApplied, lastDisplays } satisfies Persisted));
     } catch {
       // Storage full or blocked: the session still works, it just will not be remembered.
     }
@@ -125,6 +150,17 @@ export function useApp<T>(select: (s: AppState) => T): T {
     },
     () => select(state),
   );
+}
+
+/**
+ * When wallpaper `id` is on the desktop, the start of its loop, so a preview can play in step
+ * with it. With "Per display" it may be on several displays; they share nothing, so the first
+ * one wins.
+ */
+export function liveSince(s: AppState, id: number): number | undefined {
+  const c = s.current;
+  if (!c) return undefined;
+  return c.displays.find((d) => d.wallpaperId === id)?.startedAtMs ?? (c.id === id ? c.startedAtMs : undefined);
 }
 
 // ---- actions ----
