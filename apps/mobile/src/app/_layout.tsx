@@ -9,7 +9,6 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, useFonts } from '
 import { color } from '@drift/tokens';
 import { Toast } from '../components/Toast';
 import { refreshPlan, restoreSession } from '../lib/account';
-import { listenForPurchases } from '../lib/purchases';
 import { checkFollowedCreators, wallpaperFromResponse } from '../lib/notifications';
 import { getState, loadPersisted, useApp } from '../lib/store';
 
@@ -35,7 +34,6 @@ export default function RootLayout() {
   useEffect(() => {
     // The session reads the library to sync it, so it waits for the saved one to load.
     void loadPersisted().then(restoreSession);
-    void listenForPurchases();
   }, []);
 
   // Back in the foreground is when the plan most likely changed (bought on another device, or a

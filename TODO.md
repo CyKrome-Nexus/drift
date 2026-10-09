@@ -79,17 +79,24 @@ the right heading.
 - [x] ~~CyKrome Account sign-in: password or emailed code (desktop), emailed code (phone)~~
 - [x] ~~Session restore; app works fully signed out~~
 - [x] ~~Pro read from CDS ownership; lock badges, upgrade sheet, settings fall back when Pro lapses~~
-- [x] ~~Account logic shared by both apps in `packages/account/src/session.ts` (restore, plan, sync, purchases); details in `docs/account.md`~~
+- [x] ~~Account logic shared by both apps in `packages/account/src/session.ts` (restore, plan, sync, upgrade link); details in `docs/account.md`~~
 - [x] ~~Drift Pro found in the CDS catalog by slug `drift-pro`: no product-id env vars needed (`VITE_/EXPO_PUBLIC_DRIFT_PRO_PRODUCT_ID` stay as optional overrides)~~
 - [x] ~~`scripts/create-drift-pro.mjs` creates the Drift Pro product (unlisted, slug `drift-pro`)~~
 - [ ] **Owner:** run `CDS_ADMIN_TOKEN=<admin jwt> node scripts/create-drift-pro.mjs` (live CDS has no `drift-pro` yet, so every account reads Free)
-- [x] ~~CDS backend: store purchases module: App Store (Apple root-pinned JWS), Google Play (read back with the service account), Razorpay (webhook HMAC); purchases bound to one account, reconciled into Ownership; merged and deployed to production (CyKrome-Monorepo `a695bd03`, BE-011)~~
-- [x] ~~Phone: buy Pro in the App Store / Google Play (`expo-iap`), reported to CDS before the transaction is finished; Restore purchases~~
-- [x] ~~Desktop: "Get Drift Pro" opens Razorpay checkout in the browser; plan refreshes when the window regains focus~~
+- [x] ~~CDS backend: store purchases module (App Store, Google Play, Razorpay) deployed in `a695bd03`; superseded by the payment provider below~~
+- [x] ~~Phone: buy Pro in the App Store / Google Play (`expo-iap`); later removed, see below~~
+- [x] ~~Desktop: "Get Drift Pro" opens the Pro page in the browser; plan refreshes when the window regains focus~~
 - [x] ~~Drift Pro web page at nexus.cykrome.com/drift/pro/: merged dev → qa → main (CyKrome-Nexus #14, #15, #16), image published~~
+- [x] ~~Decision: no App Store / Google Play purchases. Pro is sold on nexus.cykrome.com and in the CyKrome Launcher~~
+- [x] ~~CDS backend: payments became a provider like storage (`PAYMENT_PROVIDER=razorpay|stripe`, Razorpay and Stripe adapters; switching is an env change); `/api/v1/payments` offerings, checkout, purchases, cancel, signed webhooks; App Store / Play verification removed (CyKrome-Monorepo `54f6bea4`, BE-011-Payments, on main)~~
+- [x] ~~Launcher: Nexus › Plans with prices, Subscribe/Buy (opens the processor's page), active plan with renew date and Cancel; the Marketplace "Buy" button goes through checkout too (CyKrome-Monorepo `f3d10bf6`)~~
+- [x] ~~Drift Pro page: pricing, checkout, plan status and Cancel; opens signed in via `?handoff=` (CyKrome-Nexus #17)~~
+- [x] ~~Apps: in-app purchase removed (`expo-iap`, Restore purchases); Upgrade and Manage subscription open the Pro page signed in~~
+- [ ] **Owner:** payments setup on the CDS backend: `PAYMENT_PROVIDER` + keys, `PAYMENT_OFFERINGS`, processor webhook at `…/api/v1/payments/webhooks/<provider>` (steps in `docs/account.md`)
+- [ ] **Owner:** release the launcher so Plans ships (it's merged to main; not released)
+- [ ] Before iOS submission: check App Store rules on linking out to a web purchase (guideline 3.1.1 / 3.1.3) for each storefront
 - [ ] **Owner:** the nexus site isn't deployed: its CI deploy job only runs with repo variable `DEPLOY_ENABLED=true` (unset), so production still serves the 2026-10-03 build and /drift/pro/ is 404 until deploys are on
-- [ ] **Owner:** store setup: App Store subscription + Server Notifications URL, Play subscription + RTDN + service account, Razorpay plan + webhook, then `STORE_PRODUCTS` and the provider keys on the CDS backend (steps in `docs/account.md`)
-- [ ] **Owner:** rebuild the phone dev builds; `expo-iap` and `expo-crypto` are new native modules
+- [ ] **Owner:** rebuild the phone dev builds (`expo-crypto` is a new native module; `expo-iap` is gone again)
 - [x] ~~Sync favourites, lists and followed creators across devices (Pro): `GET/PUT /api/v1/drift/library` on CDS, last-writer-wins merge on the device; Settings › Account shows sync state and "Sync now"~~
 - [x] ~~Offline library: Drift signs in from a saved snapshot when CyKrome can't be reached; Pro keeps working until its expiry date; "Offline" badge on the account card~~
 - [x] ~~Timeout for account requests (15 s; the Account screen no longer spins forever)~~
@@ -97,7 +104,7 @@ the right heading.
 - [x] ~~Phone: password sign-in (plain-JS RSA-OAEP, since Hermes has no WebCrypto) and in-app sign-up~~
 - [x] ~~Desktop: in-app sign-up (form, then the emailed code)~~
 - [ ] Sign in against the live CyKrome server end to end. Verified live so far: public key, code request (email arrives), new purchase and sync routes deployed. Code verify not completed: Cloudflare kept dropping requests (520s and timeouts that never reached the backend, whose logs show it healthy), and the codes expired. Retry in the app, and look into the Cloudflare → origin errors
-- [x] ~~Tests for accounts: plain-JS crypto, timeouts, sign-up, sync merge, offline restore, keychain migration, store purchases (112 tests in all)~~
+- [x] ~~Tests for accounts: plain-JS crypto, timeouts, sign-up, sync merge, offline restore, keychain migration, upgrade link (122 JS tests in all, plus 11 Rust)~~
 - [ ] Desktop: no follow UI yet; followed creators synced from the phone are kept but not shown
 ## Phone app
 

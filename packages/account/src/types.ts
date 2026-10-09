@@ -22,14 +22,6 @@ export interface Ownership {
   expiresAt: string | null;
 }
 
-/** One way to buy a product, from `GET /api/v1/purchases/offerings`. */
-export interface Offering {
-  provider: 'apple' | 'google' | 'razorpay';
-  /** The store's product id (App Store / Play) or the Razorpay plan id. */
-  sku: string;
-  kind: 'subscription' | 'lifetime';
-}
-
 /** Where the session token lives between launches. Each app supplies its own. */
 export interface TokenStore {
   read(): Promise<string | null>;

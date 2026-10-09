@@ -48,8 +48,7 @@
           "color": "#9184D9"
         }
       ],
-      "./plugins/withSpaceSafeBundlePhase",
-      "expo-iap"
+      "./plugins/withSpaceSafeBundlePhase"
     ],
     "experiments": {
       "typedRoutes": true

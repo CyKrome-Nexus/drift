@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { CheckCircle, CrownSimple } from '@phosphor-icons/react';
 import { PRO_FEATURES } from '@drift/core';
-import { buyPro, refreshPlan } from '../lib/account';
+import { openProPage, refreshPlan } from '../lib/account';
 import { openSettings, setState, useApp } from '../lib/store';
 import { FEATURE_ICONS } from './featureIcons';
 
@@ -51,7 +51,7 @@ export function UpgradeDialog() {
         <div className="dialog-actions">
           <button type="button" className="btn btn-secondary" onClick={close}>Not now</button>
           {signedIn ? (
-            <button type="button" className="btn btn-glass-accent" style={{ padding: '7px 14px' }} onClick={() => void buyPro()}>
+            <button type="button" className="btn btn-glass-accent" style={{ padding: '7px 14px' }} onClick={() => void openProPage()}>
               <CrownSimple weight="fill" />Get Drift Pro
             </button>
           ) : (

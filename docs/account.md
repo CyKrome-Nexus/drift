@@ -50,27 +50,32 @@ See `docs/architecture/backend/BE-011-Store-Purchases.md` in CyKrome-Monorepo.
 
 ## Buying Pro
 
-| Where | How | Verified by CDS through |
-|---|---|---|
-| iPhone | StoreKit 2 via `expo-iap`, `appAccountToken` = account id as UUID | Apple's signature chain |
-| Android | Play Billing via `expo-iap`, `obfuscatedAccountId` = account id | Reading the purchase from Google |
-| Desktop | `POST /purchases/razorpay/checkout` → Razorpay page in the browser | Razorpay webhook HMAC |
+Drift sells nothing inside the apps. Pro is bought in two places:
+- **https://nexus.cykrome.com/drift/pro/**, which shows prices, Subscribe/Buy, and your plan with Cancel
+- **the CyKrome Launcher**: Nexus › Plans
 
-A purchase is reported to CDS before the store transaction is finished. If CDS cannot be reached,
-the transaction stays open and the store delivers it again. "Restore purchases" on the phone
-reports everything the store still holds. The Pro page is https://nexus.cykrome.com/drift/pro/.
+Upgrade and "Manage subscription" in both apps open the Pro page signed in. They ask CDS for a
+single-use handoff code (`POST /api/auth/handoff`) and add it as `?handoff=`, so the session
+token never goes into a URL. When you come back, the plan refreshes: window focus on desktop,
+foreground or browser close on the phone.
+
+Payments are a CDS backend provider (CyKrome-Monorepo, BE-011): `PAYMENT_PROVIDER=razorpay|stripe`
+picks the processor, and switching is an env change. CDS grants Pro only when the processor's
+signed webhook confirms payment.
 
 ### Owner setup (once)
 
-1. Create the product: `scripts/create-drift-pro.mjs` (above).
-2. App Store Connect: an auto-renewable subscription (e.g. `com.cykrome.drift.pro.yearly`); set
-   the Server Notifications V2 URL to `https://api.cykrome.com/api/v1/purchases/apple/notifications`.
-3. Play Console: a subscription (e.g. `drift_pro`) with a base plan; real-time developer
-   notifications to `…/api/v1/purchases/google/notifications?token=<secret>`; a service account
-   with order access.
-4. Razorpay: a plan; webhook `…/api/v1/purchases/razorpay/webhook` for `subscription.*`.
-5. On the CDS backend in Dokploy, set `STORE_PRODUCTS`, `APPLE_BUNDLE_IDS`,
-   `GOOGLE_PLAY_SERVICE_ACCOUNT`, `GOOGLE_PLAY_PACKAGES`, `GOOGLE_PLAY_RTDN_TOKEN` and the
-   `RAZORPAY_*` keys (see `.env.example` there). A store with no settings simply shows no buy
-   button: the phone falls back to the Pro web page, and desktop opens it too.
-6. Rebuild the phone app: `expo-iap` and `expo-crypto` are native modules (`pnpm ios` / `pnpm android`, or EAS).
+1. Create the product: `scripts/create-drift-pro.mjs` (above). Done 2026-10-09.
+2. On the CDS backend (Dokploy):
+   - set `PAYMENT_PROVIDER` and that processor's keys (`RAZORPAY_*` or `STRIPE_*`)
+   - set `PAYMENT_OFFERINGS` (prices in the smallest unit; a Razorpay plan id for subscriptions)
+   - optionally `PAYMENT_RETURN_URL`
+   See `.env.example` and BE-011 there.
+3. Point the processor's webhook at `https://api.cykrome.com/api/v1/payments/webhooks/<razorpay|stripe>`.
+4. Deploy the nexus site (its deploys are off until `DEPLOY_ENABLED=true`) and release the launcher.
+
+Until step 2, the Pro page says "Buying opens soon", and the launcher's Plans section stays hidden.
+
+Note for App Store review: sending iOS users to an external purchase page for digital content is
+restricted outside the regions and entitlements Apple allows (guideline 3.1.1 / 3.1.3). Check the
+current rules for each storefront before submitting.

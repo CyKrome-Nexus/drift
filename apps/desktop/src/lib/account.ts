@@ -84,14 +84,13 @@ export const {
 } = session;
 
 /** Opens Razorpay's payment page for Drift Pro, or the Pro web page if online purchase is off. */
-export async function buyPro(): Promise<void> {
-  try {
-    await openExternal(await session.checkoutUrl());
-    toast('Finish in your browser — Drift updates when you come back', 'info');
-  } catch (err) {
-    console.warn('[account] checkout unavailable, opening the Pro page', messageOf(err));
-    await openExternal(LINKS.pro);
-  }
+/**
+ * Opens the Drift Pro page signed in as this account: buying and managing Pro happen there (or in
+ * the CyKrome Launcher). The plan refreshes when the window regains focus.
+ */
+export async function openProPage(): Promise<void> {
+  await openExternal(await session.upgradeUrl(LINKS.pro));
+  if (getState().account.plan.plan !== 'pro') toast('Finish in your browser — Drift updates when you come back', 'info');
 }
 
 // ---- gates ----

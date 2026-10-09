@@ -21,7 +21,7 @@ const pro = (expiresAt: string | null = null): Ownership => ({
 
 /** A CDS with auth, ownerships, the catalog lookup and the library endpoint. */
 function cds(opts: { ownerships?: Ownership[]; down?: boolean } = {}) {
-  const state = { ownerships: opts.ownerships ?? [], down: opts.down ?? false, library: null as null | { revision: string; library: Library }, puts: 0, gets: 0 };
+  const state = { ownerships: opts.ownerships ?? [], down: opts.down ?? false, library: null as null | { revision: string; library: Library }, puts: 0, gets: 0, handoffDown: false };
   let n = 0;
   const fetch = (async (url: string, init: RequestInit) => {
     if (state.down) throw new TypeError('Network request failed');
@@ -34,6 +34,7 @@ function cds(opts: { ownerships?: Ownership[]; down?: boolean } = {}) {
       case '/api/auth/me': return json(200, { user: { id: 'u1', email: 'a@x.com' } });
       case '/api/v1/me/ownership': return json(200, { ownerships: state.ownerships });
       case '/api/auth/logout': return json(200, {});
+      case '/api/auth/handoff': return state.handoffDown ? json(500, {}) : json(200, { code: 'hand-1', expiresAt: '' });
       case '/api/v1/drift/library':
         if (init.method === 'GET') { state.gets++; return json(200, state.library ?? { revision: null, library: EMPTY_LIBRARY }); }
         state.puts++;
@@ -191,5 +192,29 @@ describe('library sync', () => {
     await createSession(client(server.fetch), fresh.h).restore();
     await vi.waitFor(() => expect(fresh.account.sync.state).toBe('idle'));
     expect(fresh.library.favs).toEqual([6]);
+  });
+});
+
+describe('buying Pro on the web', () => {
+  it('opens the Pro page signed in through a handoff code, at the plans', async () => {
+    const server = cds();
+    const app = host();
+    const session = createSession(client(server.fetch), app.h);
+    await session.restore();
+    expect(await session.upgradeUrl('https://nexus.cykrome.com/drift/pro/')).toBe('https://nexus.cykrome.com/drift/pro/?handoff=hand-1#buy');
+  });
+
+  it('opens it signed out when there is no session or the handoff fails', async () => {
+    const server = cds();
+    const signedOut = host();
+    const s1 = createSession(client(server.fetch, null), signedOut.h);
+    await s1.restore();
+    expect(await s1.upgradeUrl('https://nexus.cykrome.com/drift/pro/')).toBe('https://nexus.cykrome.com/drift/pro/#buy');
+
+    server.state.handoffDown = true;
+    const app = host();
+    const s2 = createSession(client(server.fetch), app.h);
+    await s2.restore();
+    expect(await s2.upgradeUrl('https://nexus.cykrome.com/drift/pro/')).toBe('https://nexus.cykrome.com/drift/pro/#buy');
   });
 });
