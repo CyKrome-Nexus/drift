@@ -82,7 +82,7 @@ the right heading.
 - [x] ~~Account logic shared by both apps in `packages/account/src/session.ts` (restore, plan, sync, purchases); details in `docs/account.md`~~
 - [x] ~~Drift Pro found in the CDS catalog by slug `drift-pro`: no product-id env vars needed (`VITE_/EXPO_PUBLIC_DRIFT_PRO_PRODUCT_ID` stay as optional overrides)~~
 - [x] ~~`scripts/create-drift-pro.mjs` creates the Drift Pro product (unlisted, slug `drift-pro`)~~
-- [ ] **Owner:** run `CDS_ADMIN_TOKEN=<admin jwt> node scripts/create-drift-pro.mjs` (live CDS has no `drift-pro` yet, so every account reads Free)
+- [x] ~~**Owner:** created the Drift Pro product in live CDS (`drift-pro`, id `6ac87c8e56252b0c8d4d6d3b`, unlisted) with `scripts/create-drift-pro.mjs`~~
 - [x] ~~CDS backend: store purchases module: App Store (Apple root-pinned JWS), Google Play (read back with the service account), Razorpay (webhook HMAC); purchases bound to one account, reconciled into Ownership; merged and deployed to production (CyKrome-Monorepo `a695bd03`, BE-011)~~
 - [x] ~~Phone: buy Pro in the App Store / Google Play (`expo-iap`), reported to CDS before the transaction is finished; Restore purchases~~
 - [x] ~~Desktop: "Get Drift Pro" opens Razorpay checkout in the browser; plan refreshes when the window regains focus~~
