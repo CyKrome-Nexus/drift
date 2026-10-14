@@ -50,31 +50,51 @@ See `docs/architecture/backend/BE-011-Store-Purchases.md` in CyKrome-Monorepo.
 
 ## Buying Pro
 
-Drift sells nothing inside the apps. Pro is bought in two places:
-- **https://nexus.cykrome.com/drift/pro/**, which shows prices, Subscribe/Buy, and your plan with Cancel
-- **the CyKrome Launcher**: Nexus › Plans
+Where Drift sells follows the CyKrome rule in `@cykrome/sdk` (`purchaseSurface`):
 
-Upgrade and "Manage subscription" in both apps open the Pro page signed in. They ask CDS for a
-single-use handoff code (`POST /api/auth/handoff`) and add it as `?handoff=`, so the session
-token never goes into a URL. When you come back, the plan refreshes: window focus on desktop,
-foreground or browser close on the phone.
+- **Phone**: nothing is sold in the app. Upgrade shows **View on website**, which opens
+  https://nexus.cykrome.com/drift/pro/ signed in.
+- **Desktop**: the upgrade dialog lists the Drift Pro plans with prices (`payments.storefront`).
+  Subscribe/Buy starts a checkout on CDS and opens the processor's payment page in the browser;
+  Drift then polls the purchase (`payments.waitForPurchase`) and unlocks Pro as soon as the
+  processor's webhook confirms it. "View on website" stays as the other way in. When payments are
+  off, or the plans cannot be loaded, the dialog falls back to View on website.
 
-Payments are a CDS backend provider (CyKrome-Monorepo, BE-011): `PAYMENT_PROVIDER=razorpay|stripe`
-picks the processor, and switching is an env change. CDS grants Pro only when the processor's
-signed webhook confirms payment.
+Pro is also sold on the Pro page itself and in the CyKrome Launcher (Nexus › Plans).
+
+The Pro page opens signed in: Drift asks CDS for a single-use handoff code
+(`POST /api/auth/handoff`) and adds it as `?handoff=`, so the session token never goes into a
+URL. When you come back, the plan refreshes: window focus on desktop, foreground or browser close
+on the phone.
+
+Payments are a CDS backend provider (CyKrome-Monorepo, BE-011):
+`PAYMENT_PROVIDER=razorpay|stripe|cashfree|dodopayments` picks the processor, and switching is an
+env change. CDS grants Pro only when the processor's signed webhook confirms payment. With
+Cashfree, the desktop dialog also asks for a phone number, which Cashfree requires.
+
+### `@cykrome/sdk`
+
+The desktop app depends on `@cykrome/sdk` from GitHub Packages (published from CyKrome-Monorepo).
+`.npmrc` maps the `@cykrome` scope to `npm.pkg.github.com`; the token is not in the repo, because
+pnpm only reads it from user config or the environment:
+
+- locally, in `~/.npmrc`: `//npm.pkg.github.com/:_authToken=<token with read:packages>`
+- in CI, the `CYKROME_PACKAGES_TOKEN` secret (a token with read:packages on the CyKrome org)
 
 ### Owner setup (once)
 
 1. Create the product: `scripts/create-drift-pro.mjs` (above). Done 2026-10-09.
 2. On the CDS backend (Dokploy):
-   - set `PAYMENT_PROVIDER` and that processor's keys (`RAZORPAY_*` or `STRIPE_*`)
-   - set `PAYMENT_OFFERINGS` (prices in the smallest unit; a Razorpay plan id for subscriptions)
+   - set `PAYMENT_PROVIDER` and that processor's keys (`RAZORPAY_*`, `STRIPE_*`, `CASHFREE_*` or `DODO_PAYMENTS_*`)
+   - set `PAYMENT_OFFERINGS` (prices in the smallest unit; Razorpay and Cashfree plan ids for
+     subscriptions, Dodo product ids for everything)
    - optionally `PAYMENT_RETURN_URL`
    See `.env.example` and BE-011 there.
-3. Point the processor's webhook at `https://api.cykrome.com/api/v1/payments/webhooks/<razorpay|stripe>`.
+3. Point the processor's webhook at `https://api.cykrome.com/api/v1/payments/webhooks/<razorpay|stripe|cashfree|dodopayments>`.
 4. Deploy the nexus site (its deploys are off until `DEPLOY_ENABLED=true`) and release the launcher.
 
-Until step 2, the Pro page says "Buying opens soon", and the launcher's Plans section stays hidden.
+Until step 2, the Pro page says "Buying opens soon", the launcher's Plans section stays hidden, and
+desktop Drift offers View on website only.
 
 Note for App Store review: sending iOS users to an external purchase page for digital content is
 restricted outside the regions and entitlements Apple allows (guideline 3.1.1 / 3.1.3). Check the

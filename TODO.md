@@ -92,6 +92,10 @@ the right heading.
 - [x] ~~Launcher: Nexus › Plans with prices, Subscribe/Buy (opens the processor's page), active plan with renew date and Cancel; the Marketplace "Buy" button goes through checkout too (CyKrome-Monorepo `f3d10bf6`)~~
 - [x] ~~Drift Pro page: pricing, checkout, plan status and Cancel; opens signed in via `?handoff=` (CyKrome-Nexus #17)~~
 - [x] ~~Apps: in-app purchase removed (`expo-iap`, Restore purchases); Upgrade and Manage subscription open the Pro page signed in~~
+- [x] ~~CDS backend: Cashfree and Dodo Payments processors; one checkout for every product, `GET /payments/purchases/:reference` to poll after paying (CyKrome-Monorepo `44f1fc04`)~~
+- [x] ~~`@cykrome/sdk` 0.2.0 on GitHub Packages: payments client and `purchaseSurface` (phones: View on website; desktop: plans)~~
+- [x] ~~Desktop: upgrade dialog lists the Pro plans and checks out, waits for the payment, unlocks Pro; phone: View on website~~
+- [ ] **Owner:** add the `CYKROME_PACKAGES_TOKEN` secret (read:packages on the CyKrome org) to this repo, or CI cannot install `@cykrome/sdk`
 - [ ] **Owner:** payments setup on the CDS backend: `PAYMENT_PROVIDER` + keys, `PAYMENT_OFFERINGS`, processor webhook at `…/api/v1/payments/webhooks/<provider>` (steps in `docs/account.md`)
 - [ ] **Owner:** release the launcher so Plans ships (it's merged to main; not released)
 - [ ] Before iOS submission: check App Store rules on linking out to a web purchase (guideline 3.1.1 / 3.1.3) for each storefront

@@ -181,6 +181,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@cykrome/sdk':
+        specifier: ^0.2.0
+        version: 0.2.0
       '@drift/account':
         specifier: workspace:*
         version: link:../../packages/account
@@ -717,6 +720,9 @@ packages:
   '@babel/types@7.29.8':
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
+
+  '@cykrome/sdk@0.2.0':
+    resolution: {integrity: sha512-XTgw8vmepEdpO1T3ZuxBfDwOPO3JtBVQ5SuWhH0JglDTQSYOmNhL4DF3fUCr5XRPOPJ6213LP8R1PaLYbKrzRA==, tarball: https://npm.pkg.github.com/download/@cykrome/sdk/0.2.0/da8ee4cc363bf3747b2d4c9cb0640a292c9cc286}
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -4464,6 +4470,8 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
+
+  '@cykrome/sdk@0.2.0': {}
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true

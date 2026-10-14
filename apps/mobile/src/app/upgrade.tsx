@@ -13,15 +13,16 @@ import { messageOf, refreshPlan, session } from '../lib/account';
 import { setState, toast, useApp } from '../lib/store';
 
 /**
- * Drift sells nothing in the app: Pro is bought on the Drift Pro web page (or in the CyKrome
- * Launcher), opened signed in. The plan refreshes when Drift comes back to the front.
+ * On a phone Drift sells nothing in the app (the CyKrome rule, @cykrome/sdk purchaseSurface): it
+ * shows View on website and opens the Drift Pro page signed in. Desktop Drift and the CyKrome
+ * Launcher list the plans instead. The plan refreshes when Drift comes back to the front.
  */
-function GetPro() {
+function ViewOnWebsite() {
   const [busy, setBusy] = useState(false);
   return (
     <Button
       variant="primary"
-      label="Get Drift Pro on nexus.cykrome.com"
+      label="View on website"
       icon={busy ? <ActivityIndicator size="small" color={color.accent} /> : <CrownSimple size={16} weight="fill" color={color.accent} />}
       disabled={busy}
       onPress={async () => {
@@ -87,7 +88,7 @@ export default function Upgrade() {
         </View>
         <View style={{ gap: 10, marginTop: 8 }}>
           {signedIn ? (
-            <GetPro />
+            <ViewOnWebsite />
           ) : (
             <Button variant="primary" label="Sign in to upgrade" onPress={() => router.replace('/account')} />
           )}

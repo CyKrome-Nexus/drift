@@ -23,13 +23,14 @@ jobs:
 
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 22, cache: pnpm, registry-url: 'https://npm.pkg.github.com', scope: '@cykrome' }
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
 
       - run: pnpm install --frozen-lockfile
+        env: { NODE_AUTH_TOKEN: '${{ secrets.CYKROME_PACKAGES_TOKEN }}' }
 
       # No signing key here, so updater artifacts are turned off rather than
       # failing the bundler.

@@ -34,13 +34,14 @@ jobs:
 
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 22, cache: pnpm, registry-url: 'https://npm.pkg.github.com', scope: '@cykrome' }
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
 
       - run: pnpm install --frozen-lockfile
+        env: { NODE_AUTH_TOKEN: '${{ secrets.CYKROME_PACKAGES_TOKEN }}' }
 
       # Tests for packages and both apps, typecheck, the desktop frontend build, the
       # release-script selfcheck and cargo test. One script, so CI and `pnpm verify`
@@ -69,12 +70,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 22, cache: pnpm, registry-url: 'https://npm.pkg.github.com', scope: '@cykrome' }
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: apps/desktop/src-tauri
       - run: pnpm install --frozen-lockfile
+        env: { NODE_AUTH_TOKEN: '${{ secrets.CYKROME_PACKAGES_TOKEN }}' }
       # No bundles, so no signing key: installers and signatures are release.yml's job.
       # bash on every OS: PowerShell strips the quotes inside the JSON.
       - shell: bash
@@ -87,8 +89,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 22, cache: pnpm, registry-url: 'https://npm.pkg.github.com', scope: '@cykrome' }
       - run: pnpm install --frozen-lockfile
+        env: { NODE_AUTH_TOKEN: '${{ secrets.CYKROME_PACKAGES_TOKEN }}' }
       # Metro bundles the JS for both platforms; native builds need EAS or a dev build.
       - run: npx expo export --platform ios --platform android --output-dir "$RUNNER_TEMP/expo-export"
         working-directory: apps/mobile
@@ -102,11 +105,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
+        with: { node-version: 22, cache: pnpm, registry-url: 'https://npm.pkg.github.com', scope: '@cykrome' }
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 21 }
       - uses: gradle/actions/setup-gradle@v4
       - run: pnpm install --frozen-lockfile
+        env: { NODE_AUTH_TOKEN: '${{ secrets.CYKROME_PACKAGES_TOKEN }}' }
       - run: npx expo prebuild --platform android --no-install
         working-directory: apps/mobile
       - run: ./gradlew :app:assembleDebug -PreactNativeArchitectures=x86_64

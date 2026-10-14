@@ -5,5 +5,9 @@ packages:
 allowBuilds:
   esbuild: true
 
+minimumReleaseAgeExclude:
+  # First-party: our own packages need no release-age wait.
+  - '@cykrome/*'
+
 patchedDependencies:
   expo-constants@57.0.21: patches/expo-constants@57.0.21.patch
