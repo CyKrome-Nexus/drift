@@ -86,14 +86,15 @@ pnpm only reads it from user config or the environment:
 1. Create the product: `scripts/create-drift-pro.mjs` (above). Done 2026-10-09.
 2. On the CDS backend (Dokploy):
    - set `PAYMENT_PROVIDER` and that processor's keys (`RAZORPAY_*`, `STRIPE_*`, `CASHFREE_*` or `DODO_PAYMENTS_*`)
-   - set `PAYMENT_OFFERINGS` (prices in the smallest unit; Razorpay and Cashfree plan ids for
-     subscriptions, Dodo product ids for everything)
    - optionally `PAYMENT_RETURN_URL`
    See `.env.example` and BE-011 there.
-3. Point the processor's webhook at `https://api.cykrome.com/api/v1/payments/webhooks/<razorpay|stripe|cashfree|dodopayments>`.
-4. Deploy the nexus site (its deploys are off until `DEPLOY_ENABLED=true`) and release the launcher.
+3. In the admin panel, **Plans & Pricing**: create the Drift Pro plans (product `drift-pro`, price,
+   monthly / yearly / one-time). Razorpay and Cashfree subscriptions need the processor's plan id,
+   Dodo needs its product id for every plan. Prices are edited there later, with no deploy.
+4. Point the processor's webhook at `https://api.cykrome.com/api/v1/payments/webhooks/<razorpay|stripe|cashfree|dodopayments>`.
+5. Deploy the nexus site (its deploys are off until `DEPLOY_ENABLED=true`) and release the launcher.
 
-Until step 2, the Pro page says "Buying opens soon", the launcher's Plans section stays hidden, and
+Until steps 2 and 3, the Pro page says "Buying opens soon", the launcher's Plans section stays hidden, and
 desktop Drift offers View on website only.
 
 Note for App Store review: sending iOS users to an external purchase page for digital content is

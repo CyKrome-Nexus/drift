@@ -96,7 +96,11 @@ the right heading.
 - [x] ~~`@cykrome/sdk` 0.2.0 on GitHub Packages: payments client and `purchaseSurface` (phones: View on website; desktop: plans)~~
 - [x] ~~Desktop: upgrade dialog lists the Pro plans and checks out, waits for the payment, unlocks Pro; phone: View on website~~
 - [ ] **Owner:** add the `CYKROME_PACKAGES_TOKEN` secret (read:packages on the CyKrome org) to this repo, or CI cannot install `@cykrome/sdk`
-- [ ] **Owner:** payments setup on the CDS backend: `PAYMENT_PROVIDER` + keys, `PAYMENT_OFFERINGS`, processor webhook at `…/api/v1/payments/webhooks/<provider>` (steps in `docs/account.md`)
+- [x] ~~CDS backend: plans and prices live in the database (`payment_plans`), edited in the admin panel's Plans & Pricing tab; `PAYMENT_OFFERINGS` env removed (CyKrome-Monorepo `45920d98`, on dev)~~
+- [x] ~~CyKrome-Nexus: #17 (Pro page checkout) and all Dependabot PRs (#4–#13) merged into dev~~
+- [ ] **Owner:** payments setup on the CDS backend: `PAYMENT_PROVIDER` + keys in Dokploy, processor webhook at `…/api/v1/payments/webhooks/<provider>` (steps in `docs/account.md`)
+- [ ] **Owner:** create the Drift Pro plans in the admin panel (Plans & Pricing) once the backend is deployed from dev to main
+- [ ] **Owner:** CyKrome-Nexus: promote dev → qa → main and set `DEPLOY_ENABLED=true` so /drift/pro/ goes live
 - [ ] **Owner:** release the launcher so Plans ships (it's merged to main; not released)
 - [ ] Before iOS submission: check App Store rules on linking out to a web purchase (guideline 3.1.1 / 3.1.3) for each storefront
 - [ ] **Owner:** the nexus site isn't deployed: its CI deploy job only runs with repo variable `DEPLOY_ENABLED=true` (unset), so production still serves the 2026-10-03 build and /drift/pro/ is 404 until deploys are on
