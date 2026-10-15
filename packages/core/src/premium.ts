@@ -14,7 +14,7 @@ export type ProFeature =
   | 'offline';
 
 export const PRO_FEATURES: ReadonlyArray<{ id: ProFeature; title: string; detail: string; soon?: true }> = [
-  { id: 'proWallpapers', title: 'Pro wallpapers', detail: 'Apply and download the 5K masters.' },
+  { id: 'proWallpapers', title: 'Pro wallpapers', detail: 'Apply and download Drift’s 5K generated masters.' },
   { id: 'unlimitedFrameRate', title: 'Unlimited frame rate', detail: 'Play loops at your display’s full refresh rate.' },
   { id: 'multiDisplay', title: 'Span & per-display', detail: 'Stretch one loop across screens, or give each its own.' },
   { id: 'unlimitedLists', title: 'Unlimited lists', detail: 'Free accounts keep one list.' },

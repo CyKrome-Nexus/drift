@@ -5,7 +5,6 @@ import { ScrollView, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { CheckCircle } from 'phosphor-react-native';
-import { catalog, wallpaper } from '@drift/core';
 import { alpha, color } from '@drift/tokens';
 import { Art } from '../components/Art';
 import { Button } from '../components/controls';
@@ -15,8 +14,7 @@ import { useApp } from '../lib/store';
 export default function LivePhotoGuide() {
   const { id: raw } = useLocalSearchParams<{ id: string }>();
   const target = useApp((s) => s.settings.applyTarget);
-  const id = Number(raw);
-  const w = Number.isInteger(id) && catalog()[id] ? wallpaper(id) : null;
+  const w = useApp((s) => (raw ? s.known[raw] : undefined)) ?? null;
   const name = w ? `“${w.name}”` : 'Your wallpaper';
 
   const steps = [

@@ -5,13 +5,14 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DeviceMobile, Heart, Info, MagnifyingGlass } from 'phosphor-react-native';
 import { initials } from '@drift/account';
-import { CATEGORIES, FEATURED, TRENDING, byCategory, catalog, wallpaper, type Category } from '@drift/core';
+import { CATEGORIES, type Category, type Wallpaper } from '@drift/core';
 import { alpha, color } from '@drift/tokens';
 import { Art } from '../../components/Art';
 import { Button } from '../../components/controls';
 import { TabScreen } from '../../components/TabScreen';
 import { Text } from '../../components/Text';
 import { WallpaperCard } from '../../components/WallpaperCard';
+import { useFeed } from '../../lib/catalog';
 import { toggleFav, useApp } from '../../lib/store';
 import { applyWallpaper } from '../../lib/wallpaper';
 
@@ -19,16 +20,24 @@ const TICKS = 60;
 const HERO_H = 540;
 
 function Hero() {
-  const [{ hero, tick }, setCarousel] = useState({ hero: 0, tick: 0 });
-  const w = wallpaper(FEATURED[hero]);
+  const featured = useFeed({ kind: 'featured' }).items.slice(0, 4);
+  if (!featured.length) return <View style={{ height: HERO_H, backgroundColor: color.surface }} />;
+  return <HeroCarousel featured={featured} />;
+}
+
+function HeroCarousel({ featured }: { featured: Wallpaper[] }) {
+  const [{ hero: at, tick }, setCarousel] = useState({ hero: 0, tick: 0 });
+  const hero = at % featured.length;
+  const w = featured[hero];
   const fav = useApp((s) => s.favs.includes(w.id));
+  const count = featured.length;
 
   useEffect(() => {
     const iv = setInterval(() => {
-      setCarousel((c) => (c.tick + 1 < TICKS ? { ...c, tick: c.tick + 1 } : { hero: (c.hero + 1) % FEATURED.length, tick: 0 }));
+      setCarousel((c) => (c.tick + 1 < TICKS ? { ...c, tick: c.tick + 1 } : { hero: (c.hero + 1) % count, tick: 0 }));
     }, 100);
     return () => clearInterval(iv);
-  }, []);
+  }, [count]);
 
   return (
     <View style={{ height: HERO_H, overflow: 'hidden' }}>
@@ -50,18 +59,18 @@ function Hero() {
         </View>
         <Text weight="medium" size={38} style={{ lineHeight: 40 }}>{w.name}</Text>
         <Text size={12} tone={color.neutral[400]}>
-          <Text size={12}>{w.publisher}</Text> · {w.category} · {w.loop} loop
+          <Text size={12}>{w.publisher}</Text> · {w.category}{w.loop ? ` · ${w.loop} loop` : ''}
         </Text>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
           <Button variant="primary" label="Apply" icon={<DeviceMobile size={17} color={color.accent} />} onPress={() => void applyWallpaper(w)} style={{ flex: 1 }} />
-          <Button label="Details" icon={<Info size={17} color={color.text} />} onPress={() => router.push(`/wallpaper/${w.id}`)} style={{ flex: 1 }} />
+          <Button label="Details" icon={<Info size={17} color={color.text} />} onPress={() => router.push(`/wallpaper/${encodeURIComponent(w.id)}`)} style={{ flex: 1 }} />
           <Pressable accessibilityRole="button" accessibilityLabel={fav ? 'Remove from favourites' : 'Add to favourites'} onPress={() => toggleFav(w.id)} style={styles.iconBtn}>
             <Heart size={18} color={color.accent} weight={fav ? 'fill' : 'regular'} />
           </Pressable>
         </View>
         <View style={{ flexDirection: 'row', gap: 5, marginTop: 6 }}>
-          {FEATURED.map((id, i) => (
-            <Pressable key={id} hitSlop={8} accessibilityLabel={`Show ${wallpaper(id).name}`} onPress={() => setCarousel({ hero: i, tick: 0 })}
+          {featured.map((f, i) => (
+            <Pressable key={f.id} hitSlop={8} accessibilityLabel={`Show ${f.name}`} onPress={() => setCarousel({ hero: i, tick: 0 })}
               style={{ height: 3, width: i === hero ? 28 : 10, borderRadius: 2, backgroundColor: color.neutral[700], overflow: 'hidden' }}>
               <View style={{ height: '100%', width: i === hero ? `${(tick / (TICKS - 1)) * 100}%` : '0%', backgroundColor: color.accent }} />
             </Pressable>
@@ -72,11 +81,27 @@ function Hero() {
   );
 }
 
+function CategoryRow({ title, category }: { title: string; category: Category }) {
+  const { items, loading } = useFeed({ kind: 'category', category });
+  if (!items.length && !loading) return null;
+  return (
+    <View style={{ gap: 4 }}>
+      <View style={styles.rowHead}>
+        <Text weight="medium" size={16}>{title}</Text>
+        <Pressable onPress={() => router.push('/explore')} style={{ marginLeft: 'auto' }}><Text size={12} tone={color.accent}>See all</Text></Pressable>
+      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.track}>
+        {items.map((w) => <WallpaperCard key={w.id} w={w} width={124} height={220} />)}
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function Home() {
   const insets = useSafeAreaInsets();
   const [chip, setChip] = useState<'All' | Category>('All');
   const user = useApp((s) => s.account.user);
-  const all = catalog();
+  const trending = useFeed({ kind: 'trending' }).items.slice(0, 10);
   const cats = CATEGORIES.filter((c) => chip === 'All' || chip === c.category);
 
   return (
@@ -97,23 +122,13 @@ export default function Home() {
         <View style={{ gap: 20, paddingTop: 16 }}>
           {chip === 'All' && (
             <View style={{ gap: 4 }}>
-              <View style={styles.rowHead}><Text weight="medium" size={16}>Top 10 this week</Text></View>
+              <View style={styles.rowHead}><Text weight="medium" size={16}>Trending now</Text></View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.track}>
-                {TRENDING.map((id, i) => <WallpaperCard key={id} w={all[id]} width={108} height={192} rank={i + 1} />)}
+                {trending.map((w, i) => <WallpaperCard key={w.id} w={w} width={108} height={192} rank={i + 1} />)}
               </ScrollView>
             </View>
           )}
-          {cats.map(({ title, category }) => (
-            <View key={category} style={{ gap: 4 }}>
-              <View style={styles.rowHead}>
-                <Text weight="medium" size={16}>{title}</Text>
-                <Pressable onPress={() => router.push('/explore')} style={{ marginLeft: 'auto' }}><Text size={12} tone={color.accent}>See all</Text></Pressable>
-              </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.track}>
-                {byCategory(category).map((w) => <WallpaperCard key={w.id} w={w} width={124} height={220} />)}
-              </ScrollView>
-            </View>
-          ))}
+          {cats.map(({ title, category }) => <CategoryRow key={category} title={title} category={category} />)}
         </View>
       </ScrollView>
 

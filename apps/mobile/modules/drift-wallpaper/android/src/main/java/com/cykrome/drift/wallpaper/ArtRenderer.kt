@@ -19,9 +19,15 @@ import kotlin.math.sqrt
 /** One colour field of the art, in percent of the (oversized) art frame. */
 data class ArtLayer(val x: Float, val y: Float, val color: Int, val fade: Float, val circle: Boolean)
 
-/** What the app hands the wallpaper: `nativeSpec()` in `src/lib/wallpaper.ts`, as JSON. */
+/**
+ * What the app hands the wallpaper: `nativeSpec()` in `src/lib/wallpaper.ts`, as JSON. A
+ * provider's wallpaper has a [video] (its URL) and, once [DriftWallpaperModule] has downloaded it,
+ * a [videoFile] on disk; the art fields are its tint. Generated art has neither.
+ */
 data class WallpaperSpec(
   val name: String,
+  val video: String?,
+  val videoFile: String?,
   val angle: Float,
   val from: Int,
   val to: Int,
@@ -39,6 +45,8 @@ data class WallpaperSpec(
       val layers = o.getJSONArray("layers")
       return WallpaperSpec(
         name = o.optString("name", "Drift"),
+        video = o.optString("video").takeIf { it.isNotEmpty() && it != "null" },
+        videoFile = o.optString("videoFile").takeIf { it.isNotEmpty() && it != "null" },
         angle = base.getDouble("angle").toFloat(),
         from = Color.parseColor(base.getString("from")),
         to = Color.parseColor(base.getString("to")),

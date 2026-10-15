@@ -1,8 +1,8 @@
 //! The wallpaper engine — the part that puts a loop *behind* the desktop.
 //!
 //! Each wallpaper is a borderless webview (`wallpaper.html`) per display, or one spanning all
-//! of them. The page renders the same art the app shows; when the catalog ships real loops it
-//! plays a `<video>` there instead, and nothing here changes.
+//! of them. The page plays the wallpaper's video, or paints Drift's generated art. What it
+//! plays (`media`) comes from the app and passes through here untouched.
 //!
 //! Per OS (each in its own file, behind the same small set of functions):
 //! - macOS: the window sits at `kCGDesktopWindowLevel` — above the desktop picture, below the
@@ -87,7 +87,12 @@ const TICK: Duration = Duration::from_secs(2);
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ApplyRequest {
-    pub wallpaper_id: u32,
+    /// `<provider>:<id>`, e.g. `coverr:S1YbPl1NfI` or `drift:6`.
+    pub wallpaper_id: String,
+    /// What the page plays: the app's `WallpaperMedia` plus the file it picked, or null for
+    /// generated art. Opaque here.
+    #[serde(default)]
+    pub media: serde_json::Value,
     /// "Desktop" | "Lock screen" | "Both". The app sends the lock screen separately
     /// ([`set_lock_screen`]); the engine always places the desktop layer.
     pub target: String,
@@ -114,7 +119,10 @@ pub struct ApplyOutcome {
 #[serde(rename_all = "camelCase")]
 pub struct Assignment {
     pub display: String,
-    pub wallpaper_id: u32,
+    pub wallpaper_id: String,
+    /// Kept so a display that comes back gets its wallpaper again; the app does not need it.
+    #[serde(skip)]
+    pub media: serde_json::Value,
     pub started_at_ms: u64,
 }
 
@@ -216,7 +224,8 @@ struct PagePlayback {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PagePayload {
-    wallpaper_id: u32,
+    wallpaper_id: String,
+    media: serde_json::Value,
     started_at_ms: u64,
     muted: bool,
 }
@@ -227,7 +236,8 @@ struct Want {
     frame: Frame,
     /// The displays this window covers (one, or all of them for "Span").
     displays: Vec<String>,
-    wallpaper_id: u32,
+    wallpaper_id: String,
+    media: serde_json::Value,
     started_at_ms: u64,
 }
 
@@ -339,7 +349,12 @@ fn assignments_for(running: &Running, displays: &[Display]) -> Vec<Assignment> {
     }
     displays
         .iter()
-        .map(|d| Assignment { display: d.id.clone(), wallpaper_id: running.request.wallpaper_id, started_at_ms: running.started_at_ms })
+        .map(|d| Assignment {
+            display: d.id.clone(),
+            wallpaper_id: running.request.wallpaper_id.clone(),
+            media: running.request.media.clone(),
+            started_at_ms: running.started_at_ms,
+        })
         .collect()
 }
 
@@ -350,7 +365,8 @@ fn desired(running: &Running, displays: &[Display], span_supported: bool) -> Vec
         return vec![Want {
             frame,
             displays: displays.iter().map(|d| d.id.clone()).collect(),
-            wallpaper_id: running.request.wallpaper_id,
+            wallpaper_id: running.request.wallpaper_id.clone(),
+            media: running.request.media.clone(),
             started_at_ms: running.started_at_ms,
         }];
     }
@@ -358,7 +374,13 @@ fn desired(running: &Running, displays: &[Display], span_supported: bool) -> Vec
         .iter()
         .filter_map(|d| {
             let a = running.assignments.iter().find(|a| a.display == d.id)?;
-            Some(Want { frame: d.frame(), displays: vec![d.id.clone()], wallpaper_id: a.wallpaper_id, started_at_ms: a.started_at_ms })
+            Some(Want {
+                frame: d.frame(),
+                displays: vec![d.id.clone()],
+                wallpaper_id: a.wallpaper_id.clone(),
+                media: a.media.clone(),
+                started_at_ms: a.started_at_ms,
+            })
         })
         .collect()
 }
@@ -421,7 +443,8 @@ fn layout<R: Runtime>(app: &AppHandle<R>, state: &EngineState, inner: &mut Inner
         inner.generation += 1;
         let label = format!("{LABEL_PREFIX}{}", inner.generation);
         let page = PagePlayback { paused: pause_reason(&playback, &conditions, &want.displays), fps: playback.fps.clone(), quality: playback.quality.clone() };
-        let init = script(&PagePayload { wallpaper_id: want.wallpaper_id, started_at_ms: want.started_at_ms, muted }, &page)?;
+        let payload = PagePayload { wallpaper_id: want.wallpaper_id.clone(), media: want.media.clone(), started_at_ms: want.started_at_ms, muted };
+        let init = script(&payload, &page)?;
         let window = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("wallpaper.html".into()))
             .title("Drift wallpaper")
             .decorations(false)
@@ -478,12 +501,12 @@ pub fn apply<R: Runtime>(app: &AppHandle<R>, state: &EngineState, req: ApplyRequ
                     return Err("That display is no longer connected".into());
                 }
                 assignments.retain(|a| &a.display != id);
-                assignments.push(Assignment { display: id.clone(), wallpaper_id: req.wallpaper_id, started_at_ms });
+                assignments.push(Assignment { display: id.clone(), wallpaper_id: req.wallpaper_id.clone(), media: req.media.clone(), started_at_ms });
             }
             None => {
                 assignments = displays
                     .iter()
-                    .map(|d| Assignment { display: d.id.clone(), wallpaper_id: req.wallpaper_id, started_at_ms })
+                    .map(|d| Assignment { display: d.id.clone(), wallpaper_id: req.wallpaper_id.clone(), media: req.media.clone(), started_at_ms })
                     .collect();
             }
         }
@@ -590,16 +613,30 @@ pub fn start_monitor<R: Runtime>(app: AppHandle<R>) {
     }
 }
 
-/// Set the lock screen to `png` (a still frame the app rendered). Windows only; macOS and Linux
-/// say why they can't.
+/// Where the lock-screen image is written. Two names, alternated: Windows caches the image by path.
+fn lock_screen_path<R: Runtime>(app: &AppHandle<R>, ext: &str) -> Result<std::path::PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join(format!("lock-screen-{}.{ext}", if now_ms() % 2 == 0 { "a" } else { "b" })))
+}
+
+/// Set the lock screen to `png` (a still frame the app painted, for generated art). Windows
+/// only; macOS and Linux say why they can't.
 pub fn set_lock_screen<R: Runtime>(app: &AppHandle<R>, png: Vec<u8>) -> Result<(), String> {
     // The file is written only where the OS can use it.
     os::set_lock_screen(|| {
-        let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        // Two names, alternated: Windows caches the lock-screen image by path.
-        let path = dir.join(if now_ms() % 2 == 0 { "lock-screen-a.png" } else { "lock-screen-b.png" });
+        let path = lock_screen_path(app, "png")?;
         std::fs::write(&path, png).map_err(|e| e.to_string())?;
+        Ok(path)
+    })
+}
+
+/// Set the lock screen to a provider's poster image (a JPEG), fetched natively.
+pub fn set_lock_screen_url<R: Runtime>(app: &AppHandle<R>, url: &str) -> Result<(), String> {
+    crate::media::allowed(url)?;
+    os::set_lock_screen(|| {
+        let path = lock_screen_path(app, "jpg")?;
+        crate::media::fetch_to(url, &path)?;
         Ok(path)
     })
 }
@@ -613,11 +650,23 @@ pub fn supported() -> bool {
 mod tests {
     use super::*;
 
-    fn req(id: u32, displays: &str) -> ApplyRequest {
-        ApplyRequest { wallpaper_id: id, target: "Desktop".into(), displays: displays.into(), fps: "60".into(), muted: true, display: None }
+    fn req(id: &str, displays: &str) -> ApplyRequest {
+        ApplyRequest {
+            wallpaper_id: id.into(),
+            media: serde_json::json!({ "kind": "video", "url": format!("https://example.test/{id}.mp4") }),
+            target: "Desktop".into(),
+            displays: displays.into(),
+            fps: "60".into(),
+            muted: true,
+            display: None,
+        }
     }
 
-    fn running(id: u32, displays: &str, assignments: Vec<Assignment>) -> Running {
+    fn assign(display: &str, id: &str, started_at_ms: u64) -> Assignment {
+        Assignment { display: display.into(), wallpaper_id: id.into(), media: serde_json::Value::Null, started_at_ms }
+    }
+
+    fn running(id: &str, displays: &str, assignments: Vec<Assignment>) -> Running {
         Running { request: req(id, displays), started_at_ms: 100, assignments, paused: None }
     }
 
@@ -643,18 +692,20 @@ mod tests {
     #[test]
     fn same_puts_one_window_on_every_display() {
         let d = two_displays();
-        let mut r = running(7, "Same", vec![]);
+        let mut r = running("coverr:7", "Same", vec![]);
         r.assignments = assignments_for(&r, &d);
         let w = desired(&r, &d, true);
         assert_eq!(w.len(), 2);
-        assert!(w.iter().all(|w| w.wallpaper_id == 7 && w.started_at_ms == 100));
+        assert!(w.iter().all(|w| w.wallpaper_id == "coverr:7" && w.started_at_ms == 100));
+        // Each window is told what to play.
+        assert!(w.iter().all(|w| w.media["url"] == "https://example.test/coverr:7.mp4"));
         assert_eq!(w[1].frame, Frame { x: 2560, y: 0, w: 1920, h: 1080 });
     }
 
     #[test]
     fn span_is_one_window_over_the_bounding_box() {
         let d = two_displays();
-        let mut r = running(7, "Span", vec![]);
+        let mut r = running("coverr:7", "Span", vec![]);
         r.assignments = assignments_for(&r, &d);
         let w = desired(&r, &d, true);
         assert_eq!(w.len(), 1);
@@ -668,20 +719,20 @@ mod tests {
     fn per_display_shows_each_displays_own_wallpaper_and_keeps_absent_ones() {
         let d = two_displays();
         let a = vec![
-            Assignment { display: "Monitor #1".into(), wallpaper_id: 3, started_at_ms: 10 },
-            Assignment { display: "Monitor #2".into(), wallpaper_id: 9, started_at_ms: 20 },
-            Assignment { display: "Unplugged".into(), wallpaper_id: 5, started_at_ms: 30 },
+            assign("Monitor #1", "drift:3", 10),
+            assign("Monitor #2", "nasa:9", 20),
+            assign("Unplugged", "drift:5", 30),
         ];
-        let r = running(9, "Per display", a.clone());
+        let r = running("nasa:9", "Per display", a.clone());
         assert_eq!(assignments_for(&r, &d), a, "an unplugged display keeps its wallpaper for when it returns");
         let w = desired(&r, &d, true);
-        assert_eq!(w.iter().map(|w| (w.wallpaper_id, w.started_at_ms)).collect::<Vec<_>>(), [(3, 10), (9, 20)]);
+        assert_eq!(w.iter().map(|w| (w.wallpaper_id.as_str(), w.started_at_ms)).collect::<Vec<_>>(), [("drift:3", 10), ("nasa:9", 20)]);
     }
 
     #[test]
     fn per_display_leaves_unassigned_displays_alone() {
         let d = two_displays();
-        let r = running(9, "Per display", vec![Assignment { display: "Monitor #2".into(), wallpaper_id: 9, started_at_ms: 1 }]);
+        let r = running("nasa:9", "Per display", vec![assign("Monitor #2", "nasa:9", 1)]);
         let w = desired(&r, &d, true);
         assert_eq!(w.len(), 1);
         assert_eq!(w[0].displays, ["Monitor #2"]);

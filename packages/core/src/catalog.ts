@@ -1,39 +1,78 @@
-// The wallpaper catalog.
+// The wallpaper shape every screen reads, and Drift's own generated wallpapers.
 //
-// This is the placeholder catalog from the design handoff: 24 wallpapers whose "art" is
-// generated gradient motion until real loops are dropped in. When the catalog moves to CDS,
-// replace `catalog()` with a fetch that returns the same `Wallpaper` shape — every screen reads
-// only that shape.
+// Wallpapers come from providers (@drift/wallpapers): stock-video APIs such as Coverr and NASA,
+// and the 24 generated gradient loops below, which need no network. Each provider maps its
+// API onto this one shape, so no screen knows where a wallpaper came from.
+//
+// Ids are `<provider>:<provider's own id>` (`coverr:S1YbPl1NfI`, `nasa:PIA12345`, `drift:6`).
 
 export type Category = 'Ambient' | 'Cosmos' | 'Abstract' | 'Nature';
 export type Tier = 'free' | 'pro';
+export type WallpaperId = string;
+
+export interface MediaFile {
+  url: string;
+  /** Pixels; 0 when the provider does not say. */
+  width: number;
+  height: number;
+  /** MIME type, e.g. `video/mp4`. */
+  type: string;
+}
+
+/** A real wallpaper's files. Generated wallpapers have none (`media: null`). */
+export interface WallpaperMedia {
+  kind: 'video' | 'image';
+  /** A full-size still: lock screens, and the frame shown before the video starts. */
+  poster: string;
+  /** A small still for cards. */
+  thumbnail: string;
+  /** A small, short video for cards and previews. */
+  preview: string | null;
+  /** Full-quality files, smallest first. Some providers only list these when asked (`get`). */
+  files: MediaFile[];
+  /** Length of one loop; null until known. */
+  durationMs: number | null;
+}
+
+/** Who to credit, as the provider's terms require. Shown wherever the wallpaper is. */
+export interface Credit {
+  /** Provider display name, e.g. "Coverr". */
+  provider: string;
+  providerUrl: string;
+  author: string | null;
+  authorUrl: string | null;
+  /** The wallpaper's own page at the provider. */
+  sourceUrl: string | null;
+  license: string;
+}
 
 export interface Wallpaper {
-  id: number;
+  id: WallpaperId;
   name: string;
   category: Category;
   publisher: string;
   initials: string;
   description: string;
-  /** The three OKLCH hues the art is generated from. */
+  /** Three OKLCH hues: the generated art, or a tint shown while a real wallpaper loads. */
   hues: [number, number, number];
-  /** Desktop resolution label and pixels, e.g. "4K" / "3840 × 2160". */
+  /** Resolution label and pixels, e.g. "4K" / "3840 × 2160". */
   res: string;
   resFull: string;
-  /** Phone-native frame, e.g. "1290 × 2796". */
-  phoneRes: string;
-  fps: number;
-  loop: string;
-  sizeMb: number;
-  phoneSizeMb: number;
-  /** 1–10 for the weekly top ten; 11+ otherwise. */
-  rank: number;
-  rating: string;
-  ratings: string;
-  applies: string;
-  followers: string;
+  /** Portrait (phone) footage. */
+  vertical: boolean;
+  /** Null where the provider does not say. */
+  fps: number | null;
+  /** Loop length as "m:ss"; null until known. */
+  loop: string | null;
+  sizeMb: number | null;
+  /** Generated art only: the design's placeholder stats. */
+  rank?: number;
+  stats?: { rating: string; ratings: string; applies: string; followers: string; phoneRes: string; phoneSizeMb: number };
   /** Pro wallpapers need Drift Pro to apply or download. Anyone can browse and preview them. */
   tier: Tier;
+  /** Null: generated art, painted from `hues` (see art.ts). */
+  media: WallpaperMedia | null;
+  credit: Credit;
 }
 
 export const CATEGORIES: ReadonlyArray<{ title: string; category: Category }> = [
@@ -42,6 +81,68 @@ export const CATEGORIES: ReadonlyArray<{ title: string; category: Category }> = 
   { title: 'Abstract motion', category: 'Abstract' },
   { title: 'Nature loops', category: 'Nature' },
 ];
+
+/** The provider prefix of an id: `coverr` for `coverr:S1YbPl1NfI`. */
+export function providerOf(id: WallpaperId): string {
+  const i = id.indexOf(':');
+  return i > 0 ? id.slice(0, i) : '';
+}
+
+/**
+ * Saved favourites, lists and history from before providers held numbers: the generated
+ * wallpapers' indexes. Anything else that is not a provider id is dropped.
+ */
+export function migrateId(raw: unknown): WallpaperId | null {
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw < RAW.length) return `drift:${raw}`;
+  if (typeof raw === 'string' && /^[a-z0-9]+:.+/.test(raw)) return raw;
+  return null;
+}
+
+export function migrateIds(raw: unknown): WallpaperId[] {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.map(migrateId).filter((id): id is WallpaperId => id !== null))];
+}
+
+export function initialsOf(name: string): string {
+  return name.split(/\s+/).filter(Boolean).map((s) => s[0]).join('').slice(0, 2).toUpperCase();
+}
+
+/** "4K" for 2160 lines, and so on. */
+export function resolutionLabel(width: number, height: number): string {
+  const lines = Math.min(width, height) || height;
+  if (lines >= 2880) return '5K';
+  if (lines >= 2160) return '4K';
+  if (lines >= 1440) return '1440p';
+  if (lines >= 1080) return '1080p';
+  if (lines >= 720) return '720p';
+  return lines > 0 ? `${lines}p` : 'HD';
+}
+
+/** "0:12" for 12.4s. */
+export function loopLabel(ms: number | null): string | null {
+  if (ms === null || !Number.isFinite(ms) || ms <= 0) return null;
+  const s = Math.round(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/** Three hues from any string, for the tint behind a wallpaper that is still loading. */
+export function huesOf(seed: string): [number, number, number] {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+  const a = (h >>> 0) % 360;
+  return [a, (a + 40) % 360, (a + 300) % 360];
+}
+
+// ---- Drift's generated wallpapers ---------------------------------------------------------
+
+export const DRIFT_CREDIT: Credit = {
+  provider: 'Drift',
+  providerUrl: 'https://nexus.cykrome.com/drift/',
+  author: null,
+  authorUrl: null,
+  sourceUrl: null,
+  license: 'Generated by Drift',
+};
 
 const PUBLISHERS = ['Halcyon Studio', 'Mira Okafor', 'Parallax Lab', 'Kenji Arai', 'Northbound', 'Loopcraft', 'Sora Visuals', 'Ines Duarte'];
 
@@ -63,75 +164,57 @@ const RAW: ReadonlyArray<[string, Category, number, number, number]> = [
   ['Pine Mist', 'Nature', 160, 130, 200], ['Firefly Field', 'Nature', 100, 140, 60], ['Monsoon Leaf', 'Nature', 150, 190, 120],
 ];
 
-/** Weekly top ten, by wallpaper id. */
-export const TRENDING: readonly number[] = [12, 6, 2, 18, 13, 7, 20, 0, 15, 9];
-/** The four wallpapers the home hero cycles through. */
-export const FEATURED: readonly number[] = [6, 12, 2, 18];
+/** The generated set's weekly top ten, by index. */
+export const GENERATED_TRENDING: readonly number[] = [12, 6, 2, 18, 13, 7, 20, 0, 15, 9];
+/** The four generated wallpapers the home hero falls back to. */
+export const GENERATED_FEATURED: readonly number[] = [6, 12, 2, 18];
 
 const DESKTOP_RES: ReadonlyArray<[string, string]> = [['4K', '3840 × 2160'], ['5K', '5120 × 2880'], ['4K', '3840 × 2160'], ['1440p', '2560 × 1440']];
 const PHONE_RES = ['1290 × 2796', '1440 × 3200', '1290 × 2796', '1080 × 2400'];
 
-let cached: Wallpaper[] | null = null;
+let generated: Wallpaper[] | null = null;
 
-export function catalog(): Wallpaper[] {
-  if (cached) return cached;
-  cached = RAW.map(([name, category, a, b, c], i) => {
+/** The 24 generated gradient loops, in a fixed order (`drift:0` … `drift:23`). */
+export function generatedWallpapers(): Wallpaper[] {
+  if (generated) return generated;
+  generated = RAW.map(([name, category, a, b, c], i) => {
     const publisher = PUBLISHERS[(i * 3) % PUBLISHERS.length];
-    const r = TRENDING.indexOf(i);
+    const r = GENERATED_TRENDING.indexOf(i);
     const [res, resFull] = DESKTOP_RES[i % 4];
     return {
-      id: i,
+      id: `drift:${i}`,
       name,
       category,
       publisher,
-      initials: publisher.split(' ').map((s) => s[0]).join('').slice(0, 2),
+      initials: initialsOf(publisher),
       description: DESCRIPTIONS[category],
       hues: [a, b, c],
       res,
       resFull,
-      phoneRes: PHONE_RES[i % 4],
+      vertical: false,
       fps: [60, 30, 60, 120][i % 4],
       loop: `0:${String(12 + ((i * 7) % 40)).padStart(2, '0')}`,
       sizeMb: 80 + ((i * 37) % 160),
-      phoneSizeMb: 30 + ((i * 17) % 70),
       rank: r >= 0 ? r + 1 : 11 + i,
-      rating: (4.9 - (i % 5) * 0.1).toFixed(1),
-      ratings: `${(1.2 + ((i * 0.37) % 3)).toFixed(1)}k`,
-      applies: `${12 + ((i * 13) % 60)}.${i % 9}k`,
-      followers: `${18 + ((i * 11) % 80)}.${i % 7}k`,
+      stats: {
+        rating: (4.9 - (i % 5) * 0.1).toFixed(1),
+        ratings: `${(1.2 + ((i * 0.37) % 3)).toFixed(1)}k`,
+        applies: `${12 + ((i * 13) % 60)}.${i % 9}k`,
+        followers: `${18 + ((i * 11) % 80)}.${i % 7}k`,
+        phoneRes: PHONE_RES[i % 4],
+        phoneSizeMb: 30 + ((i * 17) % 70),
+      },
       // The 5K masters are the Pro tier.
       tier: res === '5K' ? 'pro' : 'free',
+      media: null,
+      credit: DRIFT_CREDIT,
     } satisfies Wallpaper;
   });
-  return cached;
+  return generated;
 }
 
-export function wallpaper(id: number): Wallpaper {
-  const w = catalog()[id];
-  if (!w) throw new Error(`No wallpaper with id ${id}`);
-  return w;
-}
-
-export function byCategory(category: Category): Wallpaper[] {
-  return catalog().filter((w) => w.category === category);
-}
-
-/** Same publisher first, then same category — what the detail view shows under "More from". */
-export function moreLike(w: Wallpaper, count = 3): Wallpaper[] {
-  const all = catalog();
-  const seen = new Set<number>([w.id]);
-  const out: Wallpaper[] = [];
-  for (const x of [...all.filter((x) => x.publisher === w.publisher), ...all.filter((x) => x.category === w.category)]) {
-    if (seen.has(x.id)) continue;
-    seen.add(x.id);
-    out.push(x);
-    if (out.length === count) break;
-  }
-  return out;
-}
-
-export function search(query: string): Wallpaper[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-  return catalog().filter((w) => [w.name, w.publisher, w.category].some((s) => s.toLowerCase().includes(q)));
+/** The index of a generated wallpaper, for anything that needs a stable small number. */
+export function generatedIndex(w: Pick<Wallpaper, 'id'>): number {
+  const n = Number(w.id.startsWith('drift:') ? w.id.slice(6) : NaN);
+  return Number.isInteger(n) ? n : 0;
 }

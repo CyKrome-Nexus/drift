@@ -4,7 +4,8 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
+import type { WallpaperId, WallpaperMedia } from '@drift/core';
 
 declare const __APP_VERSION__: string;
 export const APP_VERSION: string = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0';
@@ -42,7 +43,9 @@ export function platformLabel(os: string): string {
 }
 
 export interface ApplyRequest {
-  wallpaperId: number;
+  wallpaperId: WallpaperId;
+  /** What the wallpaper page plays; null for generated art. The engine passes it through. */
+  media: WallpaperMedia | null;
   target: string;
   displays: string;
   fps: string;
@@ -77,7 +80,7 @@ export async function stopWallpaper(): Promise<void> {
 /** One display's wallpaper and its own loop clock. */
 export interface Assignment {
   display: string;
-  wallpaperId: number;
+  wallpaperId: WallpaperId;
   startedAtMs: number;
 }
 
@@ -131,6 +134,26 @@ export async function setPlayback(playback: Playback): Promise<void> {
 export async function setLockScreen(png: Uint8Array): Promise<void> {
   if (!inTauri) throw new Error('Browser preview — run the desktop app to set the lock screen');
   await invoke('set_lock_screen', png);
+}
+
+/** Set the lock screen to a provider's poster image, fetched natively. Windows only. */
+export async function setLockScreenUrl(url: string): Promise<void> {
+  if (!inTauri) throw new Error('Browser preview — run the desktop app to set the lock screen');
+  await invoke('set_lock_screen_url', { url });
+}
+
+/** Save a wallpaper's file into `dir`; resolves to where it was saved. */
+export async function downloadFile(url: string, dir: string, name: string, ext: string): Promise<string> {
+  if (!inTauri) {
+    window.open(url, '_blank', 'noopener');
+    return url;
+  }
+  return invoke<string>('download_wallpaper', { url, dir, name, ext });
+}
+
+/** Show a saved file in Finder / Explorer / the file manager. */
+export async function revealFile(path: string): Promise<void> {
+  if (inTauri) await revealItemInDir(path);
 }
 
 export async function currentWallpaper(): Promise<Running | null> {

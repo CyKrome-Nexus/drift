@@ -1,4 +1,5 @@
 mod engine;
+mod media;
 mod secrets;
 
 use engine::{ApplyOutcome, ApplyRequest, Display, EngineState, Playback, Running};
@@ -37,6 +38,20 @@ async fn set_lock_screen(app: AppHandle, request: tauri::ipc::Request<'_>) -> Re
         tauri::ipc::InvokeBody::Raw(png) => engine::set_lock_screen(&app, png.clone()),
         _ => Err("expected the image as raw bytes".into()),
     }
+}
+
+/// The lock screen from a provider's poster (real wallpapers); `set_lock_screen` paints generated art.
+#[tauri::command]
+async fn set_lock_screen_url(app: AppHandle, url: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || engine::set_lock_screen_url(&app, &url)).await.map_err(|e| e.to_string())?
+}
+
+/// Save a wallpaper's file into the download folder; returns the path it was saved to.
+#[tauri::command]
+async fn download_wallpaper(url: String, dir: String, name: String, ext: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || media::download(&url, &dir, &name, &ext).map(|p| p.display().to_string()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Settings › General › "Show in system tray".
@@ -187,6 +202,8 @@ pub fn run() {
             list_displays,
             set_playback,
             set_lock_screen,
+            set_lock_screen_url,
+            download_wallpaper,
             set_tray_visible,
             system_info,
             secrets::session_token_get,

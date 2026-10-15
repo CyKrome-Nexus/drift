@@ -65,10 +65,23 @@ the right heading.
 
 ## Content
 
-- [ ] Real catalog from CDS (replace the 24 placeholder gradients)
-- [ ] Real video loops in the wallpaper page and previews — keep them synced via `startedAtMs`
-- [ ] Thumbnails and video previews
-- [ ] Downloads, download folder picker, cache size and Clear cache
+- [x] ~~Wallpaper providers (`packages/wallpapers`): Coverr (stock video loops) and NASA (hand-picked public-domain footage), chosen by env like the backend's providers (`WALLPAPER_PROVIDERS`, `COVERR_API_KEY`); Drift's generated gradients only where no provider has anything (docs/wallpapers.md)~~
+- [x] ~~Decision: no Unsplash, Pexels or Pixabay — their API terms forbid wallpaper apps or standalone redistribution; paid stock APIs later go through a Drift server, as one more provider~~
+- [x] ~~Wallpaper ids are `<provider>:<id>`; favourites, lists, history and synced libraries saved as numbers become `drift:<n>`~~
+- [x] ~~Provider wallpapers are free tier (Coverr's licence forbids reselling its videos); Pro keeps gating features and Drift's 5K generated masters~~
+- [x] ~~Desktop: Home, Discover, search and detail read provider feeds (paged, cached 30 min, searches debounced); posters on cards, the real file in the hero and detail; credits shown~~
+- [x] ~~Desktop engine plays the provider's video in each wallpaper window (file picked per display and Quality, muted, on the shared loop clock); lock screen from the poster; downloads save the file to the download folder (native, `media.rs`)~~
+- [x] ~~Phone: Home, Explore, Library and detail read provider feeds; previews with `expo-video` (the provider's short clip)~~
+- [x] ~~Android: live wallpaper downloads the video once and plays it with `MediaPlayer` on the wallpaper surface~~
+- [x] ~~iOS: Live Photo from three seconds of the video~~
+- [ ] **Owner:** get a Coverr API key (coverr.co/developers) and set `VITE_COVERR_API_KEY` / `EXPO_PUBLIC_COVERR_API_KEY` for builds; until then Ambient, Abstract and Nature show the generated set
+- [ ] Watch real playback: desktop wallpaper video on macOS, Windows and Linux; the hero/detail video in `tauri dev` (Chrome's background-tab check could not)
+- [ ] **Owner:** rebuild the phone dev builds (`expo-video` is a new native module), then try a Coverr and a NASA wallpaper on Android (live) and iOS (Live Photo)
+- [ ] Coverr's logo next to its credit (its terms ask for Coverr attribution; Drift shows a text credit and link today)
+- [ ] Portrait loops for the phone: prefer Coverr's vertical videos in phone feeds (landscape videos are cropped to the centre today)
+- [ ] Phone downloads open the file in the browser; save straight to Photos / Files instead
+- [ ] Download folder picker, cache size and Clear cache (desktop)
+- [x] ~~Tests for providers: Coverr and NASA mapping, env selection, merging and fallback, caching, file picking, id migration, provider apply / lock screen / download on both apps, native download host rules (147 JS tests in all, plus 15 Rust)~~
 - [ ] Wallpaper audio and "Mute wallpaper audio"
 - [ ] Creators: follow, profiles, real ratings and apply counts
 - [ ] Share links

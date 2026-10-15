@@ -13,7 +13,7 @@ export function WallpaperCard({ w, width, height, rank }: { w: Wallpaper; width:
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${w.name} by ${w.publisher}`}
-      onPress={() => router.push(`/wallpaper/${w.id}`)}
+      onPress={() => router.push(`/wallpaper/${encodeURIComponent(w.id)}`)}
       style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'flex-end' }, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}
     >
       {rank !== undefined && (

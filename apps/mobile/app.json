@@ -48,7 +48,8 @@
           "color": "#9184D9"
         }
       ],
-      "./plugins/withSpaceSafeBundlePhase"
+      "./plugins/withSpaceSafeBundlePhase",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true
