@@ -96,10 +96,12 @@ the right heading.
 - [x] ~~`@cykrome/sdk` 0.2.0 on GitHub Packages: payments client and `purchaseSurface` (phones: View on website; desktop: plans)~~
 - [x] ~~Desktop: upgrade dialog lists the Pro plans and checks out, waits for the payment, unlocks Pro; phone: View on website~~
 - [ ] **Owner:** add the `CYKROME_PACKAGES_TOKEN` secret (read:packages on the CyKrome org) to this repo, or CI cannot install `@cykrome/sdk`
-- [x] ~~CDS backend: plans and prices live in the database (`payment_plans`), edited in the admin panel's Plans & Pricing tab; `PAYMENT_OFFERINGS` env removed (CyKrome-Monorepo `45920d98`, on dev)~~
+- [x] ~~CDS backend: plans and prices live in the database (`payment_plans`, amounts in the smallest unit), edited in the admin panel's Plans & Pricing tab; `PAYMENT_OFFERINGS` env removed (CyKrome-Monorepo `45920d98`)~~
+- [x] ~~CDS backend deployed to production 2026-10-15 (monorepo dev → main at `45920d98`, with social sign-in, Cashfree/Dodo and the SDK): `/api/v1/payments/plans` answers 401 without an admin token, offerings return `{ offerings, processor, requiresPhone }`~~
+- [x] ~~Drift: web checkout (#5) and the Drift Pro product record (#4) merged into dev; `pnpm verify` passes locally (CI is red only for the missing `CYKROME_PACKAGES_TOKEN`)~~
 - [x] ~~CyKrome-Nexus: #17 (Pro page checkout) and all Dependabot PRs (#4–#13) merged into dev~~
 - [ ] **Owner:** payments setup on the CDS backend: `PAYMENT_PROVIDER` + keys in Dokploy, processor webhook at `…/api/v1/payments/webhooks/<provider>` (steps in `docs/account.md`)
-- [ ] **Owner:** create the Drift Pro plans in the admin panel (Plans & Pricing) once the backend is deployed from dev to main
+- [ ] **Owner:** create the Drift Pro plans in the admin panel (Plans & Pricing); the backend for it is live
 - [ ] **Owner:** CyKrome-Nexus: promote dev → qa → main and set `DEPLOY_ENABLED=true` so /drift/pro/ goes live
 - [ ] **Owner:** release the launcher so Plans ships (it's merged to main; not released)
 - [ ] Before iOS submission: check App Store rules on linking out to a web purchase (guideline 3.1.1 / 3.1.3) for each storefront
