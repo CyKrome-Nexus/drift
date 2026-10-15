@@ -268,6 +268,9 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+          # @cykrome/sdk comes from GitHub Packages (see .npmrc).
+          registry-url: https://npm.pkg.github.com
+          scope: '@cykrome'
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -279,6 +282,7 @@ jobs:
           key: ${{ matrix.target }}
 
       - run: pnpm install --frozen-lockfile
+        env: { NODE_AUTH_TOKEN: '${{ secrets.CYKROME_PACKAGES_TOKEN }}' }
 
       # The updater endpoint is compiled into the binary, so it has to be resolved
       # before the build rather than at publish time.

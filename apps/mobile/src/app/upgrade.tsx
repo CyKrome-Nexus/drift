@@ -9,64 +9,34 @@ import { alpha, color } from '@drift/tokens';
 import { Button } from '../components/controls';
 import { FEATURE_ICONS } from '../components/featureIcons';
 import { Text } from '../components/Text';
-import { messageOf, refreshPlan } from '../lib/account';
-import { buy, proOffers, restorePurchases, type StoreOffer } from '../lib/purchases';
+import { messageOf, refreshPlan, session } from '../lib/account';
 import { setState, toast, useApp } from '../lib/store';
 
-function offerLabel(o: StoreOffer): string {
-  return o.kind === 'lifetime' ? `Buy for life — ${o.price}` : `${o.title} — ${o.price}`;
-}
-
-/** The store's offers for Drift Pro, a restore button, and the web page when there is no store. */
-function Purchase() {
-  const [offers, setOffers] = useState<StoreOffer[] | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-
-  useEffect(() => {
-    proOffers()
-      .then(setOffers)
-      .catch((err) => {
-        console.warn('[purchases] no offers', messageOf(err));
-        setOffers([]);
-      });
-  }, []);
-
-  const run = async (key: string, fn: () => Promise<void>) => {
-    setBusy(key);
-    try {
-      await fn();
-    } catch (err) {
-      toast(messageOf(err), 'info');
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  if (offers === null) return <ActivityIndicator color={color.accent} style={{ padding: 12 }} />;
-  if (!offers.length) {
-    return <Button variant="primary" label="Get Drift Pro on cykrome.com" icon={<CrownSimple size={16} weight="fill" color={color.accent} />} onPress={() => void WebBrowser.openBrowserAsync(LINKS.pro)} />;
-  }
+/**
+ * On a phone Drift sells nothing in the app (the CyKrome rule, @cykrome/sdk purchaseSurface): it
+ * shows View on website and opens the Drift Pro page signed in. Desktop Drift and the CyKrome
+ * Launcher list the plans instead. The plan refreshes when Drift comes back to the front.
+ */
+function ViewOnWebsite() {
+  const [busy, setBusy] = useState(false);
   return (
-    <>
-      {offers.map((o, i) => (
-        <Button
-          key={o.sku}
-          variant={i === 0 ? 'primary' : undefined}
-          label={offerLabel(o)}
-          icon={busy === o.sku ? <ActivityIndicator size="small" color={color.accent} /> : <CrownSimple size={16} weight="fill" color={color.accent} />}
-          disabled={busy !== null}
-          onPress={() => void run(o.sku, () => buy(o))}
-        />
-      ))}
-      <Button
-        label="Restore purchases"
-        disabled={busy !== null}
-        onPress={() => void run('restore', async () => {
-          const n = await restorePurchases();
-          toast(n ? 'Purchases restored' : 'Nothing to restore for this account', 'info');
-        })}
-      />
-    </>
+    <Button
+      variant="primary"
+      label="View on website"
+      icon={busy ? <ActivityIndicator size="small" color={color.accent} /> : <CrownSimple size={16} weight="fill" color={color.accent} />}
+      disabled={busy}
+      onPress={async () => {
+        setBusy(true);
+        try {
+          await WebBrowser.openBrowserAsync(await session.upgradeUrl(LINKS.pro));
+          await refreshPlan();
+        } catch (err) {
+          toast(messageOf(err), 'info');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    />
   );
 }
 
@@ -118,7 +88,7 @@ export default function Upgrade() {
         </View>
         <View style={{ gap: 10, marginTop: 8 }}>
           {signedIn ? (
-            <Purchase />
+            <ViewOnWebsite />
           ) : (
             <Button variant="primary" label="Sign in to upgrade" onPress={() => router.replace('/account')} />
           )}

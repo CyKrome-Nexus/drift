@@ -283,11 +283,23 @@ export function createSession(client: AccountClient, host: AccountHost, opts: Se
     },
     /** Creates the account and emails a code; finish with signInWithCode. */
     signUp: (details: SignUpDetails) => client.signUp(details),
-    /** After a store purchase is reported, CDS answers with the new ownerships. */
-    applyOwnerships,
-    /** Desktop: the online payment page for Drift Pro. */
-    checkoutUrl: () => client.startCheckout(proSlug),
-    offerings: () => client.offerings(proSlug),
+    /**
+     * The Drift Pro web page, signed in as this account when there is one. Drift sells nothing
+     * itself: buying happens on that page (or in the CyKrome Launcher), and the plan arrives
+     * here on the next refresh.
+     */
+    async upgradeUrl(page: string): Promise<string> {
+      const url = new URL(page);
+      if (host.account().status === 'signedIn' && !host.account().offline) {
+        try {
+          url.searchParams.set('handoff', await client.handoffCode());
+        } catch {
+          // Open the page signed out; it offers sign-in.
+        }
+      }
+      url.hash = 'buy';
+      return url.toString();
+    },
   };
 }
 
