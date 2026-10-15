@@ -24,7 +24,7 @@ function openFromNotification(response: Notifications.NotificationResponse | nul
   if (id === null) return;
   // Handled: the next launch should not reopen it.
   Notifications.clearLastNotificationResponse();
-  router.push(`/wallpaper/${id}`);
+  router.push(`/wallpaper/${encodeURIComponent(id)}`);
 }
 
 export default function RootLayout() {

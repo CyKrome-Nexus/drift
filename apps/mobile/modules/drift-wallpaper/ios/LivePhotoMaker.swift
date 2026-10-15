@@ -5,11 +5,13 @@ import ImageIO
 import UIKit
 import UniformTypeIdentifiers
 
-/// What the app hands the native side: `nativeSpec()` in `src/lib/wallpaper.ts`.
+/// What the app hands the native side: `nativeSpec()` in `src/lib/wallpaper.ts`. A provider's
+/// wallpaper has a `video` URL (the module downloads it); the art fields are generated art.
 struct WallpaperSpec: Decodable {
   struct Base: Decodable { let angle: Double; let from: String; let to: String }
   struct Layer: Decodable { let x: Double; let y: Double; let color: String; let fade: Double; let shape: String }
   let name: String
+  let video: String?
   let base: Base
   let layers: [Layer]
   let overscanX: Double
@@ -31,9 +33,13 @@ final class LivePhotoWriteException: Exception {
 
 /// A Live Photo is a JPEG and a QuickTime movie that carry the same content identifier, plus a
 /// timed "still image time" marker in the movie saying which frame the photo is.
+///
+/// Its frames come from the provider's video (`videoFile`: three seconds from a quarter of the
+/// way in, cropped to fill the screen) or, for generated art, are painted from the spec.
 struct LivePhotoMaker {
   let spec: WallpaperSpec
   let size: CGSize
+  var videoFile: URL? = nil
 
   static let seconds = 3.0
   static let fps: Int32 = 30
@@ -53,13 +59,65 @@ struct LivePhotoMaker {
     let dir = FileManager.default.temporaryDirectory
     let files = LivePhotoFiles(photo: dir.appendingPathComponent("\(id).jpg"), video: dir.appendingPathComponent("\(id).mov"))
     do {
-      try await writeVideo(to: files.video, id: id)
-      try writePhoto(to: files.photo, id: id)
+      let frames = try await videoFrames()
+      try await writeVideo(to: files.video, id: id, frames: frames)
+      try await writePhoto(to: files.photo, id: id, frames: frames)
     } catch {
       files.remove()
       throw error
     }
     return files
+  }
+
+  // MARK: - Video frames
+
+  /// Reads the frames of the clip from the downloaded video; nil for generated art.
+  struct VideoFrames {
+    let generator: AVAssetImageGenerator
+    let start: CMTime
+
+    func image(frame: Int) async throws -> CGImage {
+      let at = CMTimeAdd(start, CMTime(value: CMTimeValue(frame), timescale: LivePhotoMaker.fps))
+      return try await generator.image(at: at).image
+    }
+  }
+
+  private func videoFrames() async throws -> VideoFrames? {
+    guard let videoFile else { return nil }
+    let asset = AVURLAsset(url: videoFile)
+    let duration = try await asset.load(.duration).seconds
+    guard duration.isFinite, duration > 0 else { throw LivePhotoWriteException() }
+    let generator = AVAssetImageGenerator(asset: asset)
+    generator.appliesPreferredTrackTransform = true
+    // A frame either side is close enough at 30 fps, and far faster than an exact seek.
+    let tolerance = CMTime(value: 1, timescale: Self.fps)
+    generator.requestedTimeToleranceBefore = tolerance
+    generator.requestedTimeToleranceAfter = tolerance
+    // A quarter of the way in skips fades and title cards; short clips start at the top.
+    let start = max(0, min(duration * 0.25, duration - Self.seconds))
+    return VideoFrames(generator: generator, start: CMTime(seconds: start, preferredTimescale: 600))
+  }
+
+  /// `image` scaled to cover the frame, centred. Expects the context's default bottom-left origin.
+  private func drawFilling(_ image: CGImage, in ctx: CGContext) {
+    let iw = CGFloat(image.width), ih = CGFloat(image.height)
+    let scale = max(size.width / iw, size.height / ih)
+    let w = iw * scale, h = ih * scale
+    ctx.interpolationQuality = .high
+    ctx.draw(image, in: CGRect(x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h))
+  }
+
+  /// Frame `frame` of `count` into `ctx` (bottom-left origin): video, or painted art.
+  private func paint(frame: Int, of count: Int, in ctx: CGContext, frames: VideoFrames?) async throws {
+    if let frames {
+      drawFilling(try await frames.image(frame: frame), in: ctx)
+      return
+    }
+    ctx.saveGState()
+    ctx.translateBy(x: 0, y: size.height)
+    ctx.scaleBy(x: 1, y: -1)
+    draw(in: ctx, t: position(frame: frame, of: count))
+    ctx.restoreGState()
   }
 
   // MARK: - Drawing
@@ -112,7 +170,7 @@ struct LivePhotoMaker {
 
   // MARK: - Movie
 
-  private func writeVideo(to url: URL, id: String) async throws {
+  private func writeVideo(to url: URL, id: String, frames: VideoFrames?) async throws {
     let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
 
     let identifier = AVMutableMetadataItem()
@@ -168,16 +226,14 @@ struct LivePhotoMaker {
       CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer)
       guard let buffer else { throw LivePhotoWriteException() }
       CVPixelBufferLockBaseAddress(buffer, [])
+      defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
       if let ctx = CGContext(
         data: CVPixelBufferGetBaseAddress(buffer), width: Int(size.width), height: Int(size.height), bitsPerComponent: 8,
         bytesPerRow: CVPixelBufferGetBytesPerRow(buffer), space: CGColorSpaceCreateDeviceRGB(),
         bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)
       {
-        ctx.translateBy(x: 0, y: size.height)
-        ctx.scaleBy(x: 1, y: -1)
-        draw(in: ctx, t: position(frame: frame, of: count))
+        try await paint(frame: frame, of: count, in: ctx, frames: frames)
       }
-      CVPixelBufferUnlockBaseAddress(buffer, [])
       guard pixels.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(frame), timescale: Self.fps)) else {
         throw writer.error ?? LivePhotoWriteException()
       }
@@ -189,15 +245,14 @@ struct LivePhotoMaker {
 
   // MARK: - Photo
 
-  private func writePhoto(to url: URL, id: String) throws {
+  private func writePhoto(to url: URL, id: String, frames: VideoFrames?) async throws {
     let count = Int(Self.seconds * Double(Self.fps))
     guard let ctx = CGContext(
       data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8, bytesPerRow: 0,
       space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
     else { throw LivePhotoWriteException() }
-    ctx.translateBy(x: 0, y: size.height)
-    ctx.scaleBy(x: 1, y: -1)
-    draw(in: ctx, t: position(frame: count / 2, of: count))
+    // The movie's still-image-time marker is its middle frame; the photo is that frame.
+    try await paint(frame: count / 2, of: count, in: ctx, frames: frames)
     guard let image = ctx.makeImage(),
           let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.jpeg.identifier as CFString, 1, nil)
     else { throw LivePhotoWriteException() }

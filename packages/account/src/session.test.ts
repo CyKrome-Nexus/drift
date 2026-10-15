@@ -46,7 +46,7 @@ function cds(opts: { ownerships?: Ownership[]; down?: boolean } = {}) {
   return { fetch, state };
 }
 
-function host(initial: LocalLibrary = { favs: [1], lists: [], following: [] }) {
+function host(initial: LocalLibrary = { favs: ['w:1'], lists: [], following: [] }) {
   let account: AccountState = INITIAL_ACCOUNT;
   let library = initial;
   const listeners = new Set<() => void>();
@@ -144,7 +144,7 @@ describe('library sync', () => {
     const app = host();
     const session = createSession(client(server.fetch), app.h, { pushDelayMs: 0 });
     await session.restore();
-    app.edit({ favs: [1, 2], lists: [], following: [] });
+    app.edit({ favs: ['w:1', 'w:2'], lists: [], following: [] });
     await session.syncNow();
     expect(server.state.gets + server.state.puts).toBe(0);
     expect(app.account.sync.state).toBe('off');
@@ -154,21 +154,21 @@ describe('library sync', () => {
     vi.useFakeTimers();
     try {
       const server = cds({ ownerships: [pro()] });
-      const desktop = host({ favs: [1], lists: [], following: [] });
+      const desktop = host({ favs: ['w:1'], lists: [], following: [] });
       const ds = createSession(client(server.fetch), desktop.h, { pushDelayMs: 100 });
       await ds.restore();
       await vi.waitFor(() => expect(desktop.account.sync.state).toBe('idle'));
-      expect(server.state.library!.library.favs['1'].on).toBe(true);
+      expect(server.state.library!.library.favs['w:1'].on).toBe(true);
 
-      desktop.edit({ favs: [5, 1], lists: [{ id: 'l', name: 'Night', items: [5] }], following: [] });
+      desktop.edit({ favs: ['w:5', 'w:1'], lists: [{ id: 'l', name: 'Night', items: ['w:5'] }], following: [] });
       await vi.advanceTimersByTimeAsync(150);
       await vi.waitFor(() => expect(server.state.library!.library.lists.l?.name).toBe('Night'));
 
       const phone = host({ favs: [], lists: [], following: ['Mira'] });
       await createSession(client(server.fetch), phone.h).restore();
       await vi.waitFor(() => expect(phone.account.sync.state).toBe('idle'));
-      expect(phone.library.favs).toEqual([5, 1]);
-      expect(phone.library.lists).toEqual([{ id: 'l', name: 'Night', items: [5] }]);
+      expect(phone.library.favs).toEqual(['w:5', 'w:1']);
+      expect(phone.library.lists).toEqual([{ id: 'l', name: 'Night', items: ['w:5'] }]);
       expect(phone.library.following).toEqual(['Mira']);
 
       await ds.syncNow();
@@ -180,18 +180,18 @@ describe('library sync', () => {
 
   it('lets a removal on one device beat the defaults of a device that never synced', async () => {
     const server = cds({ ownerships: [pro()] });
-    const a = host({ favs: [6, 14], lists: [], following: [] });
+    const a = host({ favs: ['w:6', 'w:14'], lists: [], following: [] });
     const sa = createSession(client(server.fetch), a.h, { pushDelayMs: 0 });
     await sa.restore();
     await vi.waitFor(() => expect(a.account.sync.state).toBe('idle'));
-    a.edit({ favs: [6], lists: [], following: [] });
+    a.edit({ favs: ['w:6'], lists: [], following: [] });
     await sa.syncNow();
-    await vi.waitFor(() => expect(server.state.library!.library.favs['14'].on).toBe(false));
+    await vi.waitFor(() => expect(server.state.library!.library.favs['w:14'].on).toBe(false));
 
-    const fresh = host({ favs: [6, 14], lists: [], following: [] });
+    const fresh = host({ favs: ['w:6', 'w:14'], lists: [], following: [] });
     await createSession(client(server.fetch), fresh.h).restore();
     await vi.waitFor(() => expect(fresh.account.sync.state).toBe('idle'));
-    expect(fresh.library.favs).toEqual([6]);
+    expect(fresh.library.favs).toEqual(['w:6']);
   });
 });
 

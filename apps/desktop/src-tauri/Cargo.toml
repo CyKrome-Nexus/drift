@@ -21,6 +21,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-opener = "2"
 tauri-plugin-process = "2"
+# Provider media (downloads, lock-screen posters): the webview cannot read cross-origin bytes.
+ureq = "3"
 
 # Desktop-level wallpaper windows on macOS. Same versions Tauri itself links.
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -12,7 +12,6 @@ import {
   type IconProps,
 } from '@phosphor-icons/react';
 import { planLine } from '@drift/account';
-import { wallpaper } from '@drift/core';
 import { stop } from '../lib/actions';
 import { displayLabel, listDisplays, type Display } from '../lib/platform';
 import { back, openSettings, showUpgrade, toast, useApp, type Section } from '../lib/store';
@@ -68,6 +67,9 @@ function PlanCard() {
 
 function CurrentWallpaper() {
   const current = useApp((s) => s.current);
+  const known = useApp((s) => s.known);
+  // A wallpaper this device has not seen (applied elsewhere, cache cleared) still gets a row.
+  const named = (id: string) => known[id] ?? { name: 'Wallpaper', publisher: id.split(':')[0] || 'Drift' };
   const [displays, setDisplays] = useState<Display[]>([]);
 
   // Re-read on every change: a change may be a display plugged in or removed.
@@ -97,7 +99,7 @@ function CurrentWallpaper() {
     return (
       <Group title="Wallpaper">
         {shown.map(({ d, i, a }, n) => {
-          const w = wallpaper(a.wallpaperId);
+          const w = named(a.wallpaperId);
           return (
             <Row key={d.id} label={`${displayLabel(d, i)} · ${w.name}`} desc={n === 0 ? `${w.publisher} · ${state}` : w.publisher}>
               {n === 0 && remove}
@@ -107,7 +109,7 @@ function CurrentWallpaper() {
       </Group>
     );
   }
-  const w = wallpaper(current.id);
+  const w = named(current.id);
   return (
     <Group title="Wallpaper">
       <Row label={w.name} desc={`${w.publisher} · ${state}`}>{remove}</Row>

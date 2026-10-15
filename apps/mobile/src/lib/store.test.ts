@@ -30,20 +30,23 @@ describe('phone store', () => {
   it('remembers favourites and settings across launches', async () => {
     const first = await freshStore();
     await first.loadPersisted();
-    first.toggleFav(11);
+    first.toggleFav('drift:11');
     first.updateSettings({ fps: '30' });
 
     const second = await freshStore();
     await second.loadPersisted();
-    expect(second.getState().favs[0]).toBe(11);
+    expect(second.getState().favs[0]).toBe('drift:11');
     expect(second.getState().settings.fps).toBe('30');
   });
 
   it('ignores junk in saved favourites', async () => {
-    native.storage.set(KEY, JSON.stringify({ favs: [1, 'x', null, 2] }));
+    native.storage.set(KEY, JSON.stringify({ favs: [1, 'x', null, 2, 'coverr:a'], lists: [{ id: 'l', name: 'L', items: [3] }, { nope: 1 }] }));
     const { getState, loadPersisted } = await freshStore();
     await loadPersisted();
-    expect(getState().favs).toEqual([1, 2]);
+    // Numbers saved before providers are the generated set's.
+    expect(getState().favs).toEqual(['drift:1', 'drift:2', 'coverr:a']);
+    expect(getState().lists).toEqual([{ id: 'l', name: 'L', items: ['drift:3'] }]);
+    expect(getState().known['drift:2'].name).toBe('Slow Aurora');
   });
 
   it('drops the Pro frame rate when the plan lapses', async () => {

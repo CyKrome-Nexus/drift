@@ -27,7 +27,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src ipc: http://ipc.localhost https://api.cykrome.com https://*.cykrome.com http://localhost:*"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://storage.coverr.co https://images-assets.nasa.gov; media-src 'self' blob: https://storage.coverr.co https://images-assets.nasa.gov; font-src 'self' data:; connect-src ipc: http://ipc.localhost https://api.cykrome.com https://*.cykrome.com http://localhost:* https://api.coverr.co https://images-assets.nasa.gov"
     }
   },
   "plugins": {

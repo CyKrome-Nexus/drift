@@ -1,21 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_DESKTOP_SETTINGS,
-  FEATURED,
-  TRENDING,
+  GENERATED_FEATURED,
+  GENERATED_TRENDING,
   art,
   artCss,
   canApply,
   canCreateList,
-  catalog,
   clampToPlan,
+  generatedWallpapers,
   hydrate,
-  moreLike,
   driftAt,
   easeInOut,
+  loopLabel,
   loopPositionMs,
+  migrateId,
+  migrateIds,
   oklchToHex,
-  search,
+  providerOf,
+  resolutionLabel,
 } from './index';
 
 describe('oklchToHex', () => {
@@ -39,53 +42,66 @@ describe('oklchToHex', () => {
   });
 });
 
-describe('catalog', () => {
-  const all = catalog();
+describe('generated wallpapers', () => {
+  const all = generatedWallpapers();
 
-  it('has the 24 wallpapers from the design, with stable ids', () => {
+  it('has the 24 wallpapers from the design, with stable drift: ids', () => {
     expect(all).toHaveLength(24);
-    all.forEach((w, i) => expect(w.id).toBe(i));
+    all.forEach((w, i) => expect(w.id).toBe(`drift:${i}`));
     expect(all[6].name).toBe('Event Horizon');
+    expect(all.every((w) => w.media === null && w.credit.provider === 'Drift')).toBe(true);
   });
 
   it('ranks exactly the trending ten as 1–10', () => {
-    TRENDING.forEach((id, i) => expect(all[id].rank).toBe(i + 1));
-    expect(all.filter((w) => w.rank <= 10)).toHaveLength(10);
+    GENERATED_TRENDING.forEach((i, n) => expect(all[i].rank).toBe(n + 1));
+    expect(all.filter((w) => (w.rank ?? 99) <= 10)).toHaveLength(10);
   });
 
   it('keeps every featured wallpaper free, so the hero is always applicable', () => {
-    FEATURED.forEach((id) => expect(all[id].tier).toBe('free'));
+    GENERATED_FEATURED.forEach((i) => expect(all[i].tier).toBe('free'));
   });
 
   it('makes the 5K masters the Pro tier', () => {
     for (const w of all) expect(w.tier === 'pro').toBe(w.res === '5K');
     expect(all.some((w) => w.tier === 'pro')).toBe(true);
   });
+});
 
-  it('finds more from the same publisher before the same category, never the wallpaper itself', () => {
-    const w = all[6];
-    const more = moreLike(w);
-    expect(more).toHaveLength(3);
-    expect(more.map((x) => x.id)).not.toContain(w.id);
-    expect(new Set(more.map((x) => x.id)).size).toBe(3);
+describe('wallpaper ids', () => {
+  it('names the provider', () => {
+    expect(providerOf('coverr:S1YbPl1NfI')).toBe('coverr');
+    expect(providerOf('nasa:FD 17 hi res')).toBe('nasa');
+    expect(providerOf('nope')).toBe('');
   });
 
-  it('searches names, publishers and categories case-insensitively', () => {
-    expect(search('horizon').map((w) => w.id)).toEqual([6]);
-    expect(search('COSMOS')).toHaveLength(6);
-    expect(search('   ')).toEqual([]);
+  it('migrates saved numbers to the generated set and drops garbage', () => {
+    expect(migrateId(6)).toBe('drift:6');
+    expect(migrateId('coverr:abc')).toBe('coverr:abc');
+    expect(migrateId(99)).toBeNull();
+    expect(migrateId('6')).toBeNull();
+    expect(migrateIds([6, 'drift:6', 14, null, 'nasa:x'])).toEqual(['drift:6', 'drift:14', 'nasa:x']);
+    expect(migrateIds('nope')).toEqual([]);
+  });
+
+  it('labels resolutions and loops', () => {
+    expect(resolutionLabel(3840, 2160)).toBe('4K');
+    expect(resolutionLabel(1080, 1920)).toBe('1080p');
+    expect(resolutionLabel(0, 0)).toBe('HD');
+    expect(loopLabel(11_625)).toBe('0:12');
+    expect(loopLabel(201_000)).toBe('3:21');
+    expect(loopLabel(null)).toBeNull();
   });
 });
 
 describe('art', () => {
   it('produces three fields over a base, in hex', () => {
-    const a = art(catalog()[0], 'portrait');
+    const a = art(generatedWallpapers()[0], 'portrait');
     expect(a.layers).toHaveLength(3);
     for (const l of a.layers) expect(l.color).toMatch(/^#[0-9a-f]{6}$/);
   });
 
   it('renders as a four-layer CSS background', () => {
-    const css = artCss(catalog()[3]);
+    const css = artCss(generatedWallpapers()[3]);
     expect(css.match(/radial-gradient/g)).toHaveLength(3);
     expect(css).toContain('linear-gradient(160deg');
   });

@@ -1,7 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_MOBILE_SETTINGS, art, catalog } from '@drift/core';
+import { DEFAULT_MOBILE_SETTINGS, art, generatedWallpapers, type Wallpaper } from '@drift/core';
 import { native } from '../test/fakes';
 import { DRIFT_MS, OVERSCAN_X, OVERSCAN_Y } from './motion';
+
+// Providers are not called: the feed is the generated set, and `resolve` hands back what it gets.
+const provider = vi.hoisted(() => ({ used: [] as string[] }));
+vi.mock('./catalog', async () => {
+  const { generatedWallpapers } = await import('@drift/core');
+  return {
+    catalog: {
+      feed: async () => ({ items: generatedWallpapers(), next: null }),
+      used: async (w: { id: string }) => void provider.used.push(w.id),
+    },
+    resolve: async <T,>(w: T) => w,
+  };
+});
 
 async function fresh() {
   vi.resetModules();
@@ -10,8 +23,26 @@ async function fresh() {
   return { ...store, ...wallpaper };
 }
 
-const free = catalog().find((w) => w.tier === 'free')!;
-const pro = catalog().find((w) => w.tier === 'pro')!;
+const free = generatedWallpapers().find((w) => w.tier === 'free')!;
+const pro = generatedWallpapers().find((w) => w.tier === 'pro')!;
+/** A provider's wallpaper: NASA-style files, smallest first, sizes known only for the original. */
+const video: Wallpaper = {
+  ...free,
+  id: 'nasa:EarthAtNight',
+  name: 'Earth at Night',
+  media: {
+    kind: 'video',
+    poster: 'https://images-assets.nasa.gov/p.jpg',
+    thumbnail: 'https://images-assets.nasa.gov/t.jpg',
+    preview: 'https://images-assets.nasa.gov/preview.mp4',
+    files: [
+      { url: 'https://images-assets.nasa.gov/mobile.mp4', width: 0, height: 0, type: 'video/mp4' },
+      { url: 'https://images-assets.nasa.gov/large.mp4', width: 0, height: 0, type: 'video/mp4' },
+      { url: 'https://images-assets.nasa.gov/orig.mp4', width: 3840, height: 2160, type: 'video/mp4' },
+    ],
+    durationMs: 83_000,
+  },
+};
 
 describe('the spec the native wallpapers draw', () => {
   it('carries the portrait art, the app’s motion and the playback settings', async () => {
@@ -19,10 +50,39 @@ describe('the spec the native wallpapers draw', () => {
     const spec = nativeSpec(free, { ...DEFAULT_MOBILE_SETTINGS, fps: '30', pauseLowPower: false });
     const { layers, base } = art(free, 'portrait');
     expect(spec).toEqual({
-      id: free.id, name: free.name, base, layers,
+      id: free.id, name: free.name, video: null, poster: null, base, layers,
       overscanX: OVERSCAN_X, overscanY: OVERSCAN_Y, driftMs: DRIFT_MS,
       fps: 30, pauseLowPower: false,
     });
+  });
+});
+
+describe('a provider’s video on the phone', () => {
+  it('sends Android a light file to loop all day, and iOS the sharpest for its Live Photo', async () => {
+    const { phoneFile, nativeSpec } = await fresh();
+    expect(phoneFile(video, 'android')).toBe('https://images-assets.nasa.gov/large.mp4');
+    expect(phoneFile(video, 'ios')).toBe('https://images-assets.nasa.gov/orig.mp4');
+    expect(phoneFile(free, 'ios')).toBeNull();
+    expect(nativeSpec(video, DEFAULT_MOBILE_SETTINGS)).toMatchObject({ id: video.id, poster: video.media!.poster });
+  });
+
+  it('applies it and tells the provider', async () => {
+    native.os = 'android';
+    native.wallpaper.androidResult = 'applied';
+    provider.used = [];
+    const { applyWallpaper } = await fresh();
+    await applyWallpaper(video);
+    expect(JSON.parse(native.wallpaper.specs[0]).video).toBe('https://images-assets.nasa.gov/large.mp4');
+    expect(provider.used).toEqual([video.id]);
+  });
+
+  it('downloads by opening the file, and generated art has none', async () => {
+    const { downloadWallpaper, getState } = await fresh();
+    await downloadWallpaper(video);
+    expect(native.openedUrls).toEqual(['https://images-assets.nasa.gov/orig.mp4']);
+    await downloadWallpaper(free);
+    expect(native.openedUrls).toHaveLength(1);
+    expect(getState().toast?.text).toContain('no file to save');
   });
 });
 
@@ -69,7 +129,7 @@ describe('phone wallpaper actions', () => {
     const done = applyWallpaper(free);
     await vi.advanceTimersByTimeAsync(PHOTOS_HINT_MS);
     await done;
-    expect(native.routes).toEqual([`/live-photo?id=${free.id}`]);
+    expect(native.routes).toEqual([`/live-photo?id=${encodeURIComponent(free.id)}`]);
     vi.useRealTimers();
   });
 
@@ -91,7 +151,7 @@ describe('phone wallpaper actions', () => {
     await vi.advanceTimersByTimeAsync(PHOTOS_HINT_MS);
     await done;
     // Photos fails too here, so the guide is the last resort.
-    expect(native.routes).toEqual([`/live-photo?id=${free.id}`]);
+    expect(native.routes).toEqual([`/live-photo?id=${encodeURIComponent(free.id)}`]);
     vi.useRealTimers();
   });
 
