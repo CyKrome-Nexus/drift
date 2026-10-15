@@ -4,7 +4,6 @@ import {
   AccountTimeoutError,
   type AccountClientOptions,
   type CyKromeUser,
-  type Offering,
   type Ownership,
   type Session,
   type SignUpDetails,
@@ -209,43 +208,14 @@ export class AccountClient {
     }
   }
 
-  // ---- Purchases (CDS verifies each with the store and answers with the new ownerships) ----
+  // ---- Buying (on the web, not in the apps) ----
 
-  async offerings(product: string): Promise<Offering[]> {
-    const { offerings } = await this.request<{ offerings: Offering[] }>(
-      'GET',
-      `/api/v1/purchases/offerings?product=${encodeURIComponent(product)}`,
-      { auth: false },
-    );
-    return offerings ?? [];
+  /**
+   * A single-use, one-minute code that signs a CyKrome website in as this account. Appended as
+   * `?handoff=` so the Pro page opens signed in; the session token itself never enters a URL.
+   */
+  async handoffCode(): Promise<string> {
+    const { code } = await this.request<{ code: string }>('POST', '/api/auth/handoff');
+    return code;
   }
-
-  async reportApplePurchase(signedTransaction: string): Promise<Ownership[]> {
-    const { ownerships } = await this.request<{ ownerships: Ownership[] }>('POST', '/api/v1/purchases/apple', {
-      body: { signedTransaction },
-    });
-    return ownerships ?? [];
-  }
-
-  async reportGooglePurchase(purchase: { packageName: string; productId: string; purchaseToken: string }): Promise<Ownership[]> {
-    const { ownerships } = await this.request<{ ownerships: Ownership[] }>('POST', '/api/v1/purchases/google', {
-      body: purchase,
-    });
-    return ownerships ?? [];
-  }
-
-  /** Starts an online subscription; returns the payment page to open in the browser. */
-  async startCheckout(product: string): Promise<string> {
-    const { url } = await this.request<{ url: string }>('POST', '/api/v1/purchases/razorpay/checkout', { body: { product } });
-    return url;
-  }
-}
-
-/**
- * The App Store `appAccountToken` for a CyKrome account: its 24-hex id laid out as a UUID. CDS
- * accepts an App Store purchase only for the account whose token it carries.
- */
-export function accountToken(userId: string): string {
-  const h = `${userId.toLowerCase()}00000000`;
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }

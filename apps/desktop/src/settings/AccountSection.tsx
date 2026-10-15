@@ -3,7 +3,7 @@ import { ArrowClockwise, ArrowsClockwise, CheckCircle, CircleNotch, CloudSlash, 
 import { displayName, initials, planLine, type SyncStatus } from '@drift/account';
 import { LINKS, PRO_FEATURES } from '@drift/core';
 import { FEATURE_ICONS } from '../components/featureIcons';
-import { buyPro, messageOf, refreshPlan, requestCode, signInWithCode, signInWithPassword, signOut, signUp, syncNow } from '../lib/account';
+import { openProPage, messageOf, refreshPlan, requestCode, signInWithCode, signInWithPassword, signOut, signUp, syncNow } from '../lib/account';
 import { openExternal } from '../lib/platform';
 import { showUpgrade, useApp } from '../lib/store';
 import { Group } from './controls';
@@ -191,7 +191,7 @@ function SignedIn() {
             <ArrowClockwise className={refreshing ? 'spin' : undefined} />Refresh
           </button>
           {isPro ? (
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => void openExternal(LINKS.pro)}>Manage subscription</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => void openProPage()}>Manage subscription</button>
           ) : (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => showUpgrade()}><CrownSimple weight="fill" />Upgrade</button>
           )}

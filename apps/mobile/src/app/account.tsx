@@ -11,7 +11,7 @@ import { Button, Group, Row } from '../components/controls';
 import { FEATURE_ICONS } from '../components/featureIcons';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { Text } from '../components/Text';
-import { messageOf, refreshPlan, requestCode, signInWithCode, signInWithPassword, signOut, signUp, syncNow } from '../lib/account';
+import { messageOf, refreshPlan, requestCode, session, signInWithCode, signInWithPassword, signOut, signUp, syncNow } from '../lib/account';
 import { useApp } from '../lib/store';
 
 function Field(props: React.ComponentProps<typeof TextInput> & { label: string }) {
@@ -198,7 +198,7 @@ function SignedIn() {
 
       <View style={{ gap: 10 }}>
         {isPro ? (
-          <Button label="Manage subscription" onPress={() => void WebBrowser.openBrowserAsync(LINKS.pro)} />
+          <Button label="Manage subscription" onPress={async () => { await WebBrowser.openBrowserAsync(await session.upgradeUrl(LINKS.pro)); await refreshPlan(); }} />
         ) : (
           <Button variant="primary" label="Upgrade to Drift Pro" icon={<CrownSimple size={16} weight="fill" color={color.accent} />} onPress={() => router.push('/upgrade')} />
         )}

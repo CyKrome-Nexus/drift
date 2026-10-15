@@ -1,6 +1,7 @@
 // CyKrome Account for the desktop app: the shared session (packages/account/src/session.ts) wired
 // to this app's store, plus the Pro gates and the online checkout.
 
+import { createClient, type CheckoutStarted, type Purchase, type Storefront } from '@cykrome/sdk';
 import { AccountClient, createSession, messageOf, type AccountHost, type TokenStore } from '@drift/account';
 import { LINKS, canApply, canCreateList, type ProFeature, type Wallpaper } from '@drift/core';
 import { invoke } from '@tauri-apps/api/core';
@@ -83,15 +84,45 @@ export const {
   signUp,
 } = session;
 
-/** Opens Razorpay's payment page for Drift Pro, or the Pro web page if online purchase is off. */
-export async function buyPro(): Promise<void> {
-  try {
-    await openExternal(await session.checkoutUrl());
-    toast('Finish in your browser — Drift updates when you come back', 'info');
-  } catch (err) {
-    console.warn('[account] checkout unavailable, opening the Pro page', messageOf(err));
-    await openExternal(LINKS.pro);
-  }
+/**
+ * Opens the Drift Pro page signed in as this account, where Pro is also sold and managed. The
+ * plan refreshes when the window regains focus.
+ */
+export async function openProPage(): Promise<void> {
+  await openExternal(await session.upgradeUrl(LINKS.pro));
+  if (getState().account.plan.plan !== 'pro') toast('Finish in your browser — Drift updates when you come back', 'info');
+}
+
+// ---- plans (the desktop sells in the app; phones send buyers to the website) ----
+
+export const PRO_PRODUCT = 'drift-pro';
+
+/** The CyKrome SDK on this account's session. */
+const cds = () => createClient({ baseUrl: BASE_URL, token: account.bearer ?? undefined });
+
+export interface Plans {
+  storefront: Storefront;
+  purchases: Purchase[];
+}
+
+export async function loadPlans(): Promise<Plans> {
+  const [storefront, purchases] = await Promise.all([
+    cds().payments.storefront(PRO_PRODUCT),
+    account.isAuthenticated ? cds().payments.purchases() : Promise.resolve([]),
+  ]);
+  return { storefront, purchases };
+}
+
+/**
+ * Checks out one plan: the processor's page opens in the browser, and Drift waits for the backend
+ * to confirm the payment (its webhook adds Pro to the account), then refreshes the plan.
+ */
+export async function buyPlan(offering: string, phone?: string, signal?: AbortSignal): Promise<Purchase> {
+  const started: CheckoutStarted = await cds().payments.checkout({ offering, phone });
+  await openExternal(started.url);
+  const purchase = await cds().payments.waitForPurchase(started.reference, { signal });
+  if (purchase.status === 'active') await refreshPlan();
+  return purchase;
 }
 
 // ---- gates ----

@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@cykrome/sdk": "^0.2.0",
     "@drift/account": "workspace:*",
     "@drift/core": "workspace:*",
     "@drift/tokens": "workspace:*",
