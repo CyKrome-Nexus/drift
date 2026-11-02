@@ -25,6 +25,22 @@ the right heading.
 - [x] ~~Window fixed at 75% of the display, centred, not resizable, not draggable~~
 - [x] ~~Close hides to the tray while a wallpaper is running; Dock click brings it back~~
 - [x] ~~Tray / menu-bar icon: Open Drift, Remove wallpaper, Quit~~
+- [x] ~~Tray popover (macOS, Windows): clicking the icon opens a translucent menu window anchored to it (`tray.html`, `src-tauri/src/tray.rs`); closes on Esc or when it loses focus; ⌘Q / Ctrl+Q quits~~
+- [x] ~~Tray: live preview of the desktop wallpaper, in step with it (shared loop clock), playing only while the popover is open; wallpaper name and why it is paused~~
+- [x] ~~Tray: version line and what previous / next walk (Favourites, a list, or Recents)~~
+- [x] ~~Tray controls: start over, previous, pause / play, next, shuffle~~
+- [x] ~~Engine: pause by hand (`set_paused`), on top of the automatic pause rules; applying another wallpaper or removing it resumes~~
+- [x] ~~Tray: Open Drift, Remove wallpaper, Frame rate › and Quality › (Pro options gated), Settings, Get Pro (free plans), Quit~~
+- [x] ~~Tray: Recents › (last 10 wallpapers shown, kept across launches) and Playlists › (Favourites and each list; playing one sets the queue)~~
+- [x] ~~Tray: CPU and RAM of Drift and its webview helper processes (WebKit services by responsible process on macOS), and the webviews' cache size, refreshed every 2 s while open (`src-tauri/src/stats.rs`)~~
+- [x] ~~Tray: Clear Cache empties only the webviews' cache folders, never saved library or settings~~
+- [x] ~~Tray: Reduce CPU/RAM (30 fps at Low quality, puts the old values back when turned off) and Start on login~~
+- [x] ~~The main window talks to the popover over events (`src/lib/trayBridge.ts`, `trayProtocol.ts`); all logic stays in the main window~~
+- [x] ~~Closing the window with nothing running still quits (the hidden popover would otherwise keep Drift open)~~
+- [x] ~~Tests: queue stepping, shuffle, list fallback, pause, Reduce CPU/RAM, recents, cache clearing, held pause in the engine~~
+- [ ] Tray popover on Windows: check the acrylic material, placement above the taskbar, and the focus-loss close in a real build
+- [ ] Linux tray stays a native menu (Open Drift, Remove wallpaper, Quit): Linux trays report no clicks to open a popover from
+- [ ] Monochrome template icon for the macOS menu bar (the tray still uses the app icon)
 - [x] ~~"Show in system tray" setting controls the tray icon~~
 - [x] ~~"Launch Drift at login" (off by default; login launch starts hidden)~~
 - [ ] Verify "Launch at login" in a packaged build (skipped in `tauri dev` on purpose)

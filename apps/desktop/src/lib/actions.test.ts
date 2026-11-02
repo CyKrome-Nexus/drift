@@ -46,7 +46,7 @@ vi.mock('./catalog', () => ({
 vi.mock('./paint', () => ({ stillFrame: vi.fn(async () => new Uint8Array([1, 2, 3])) }));
 
 function running(over: Partial<Running> = {}): Running {
-  return { wallpaperId: 'drift:7', media: null, target: 'Desktop', displays: 'Same', fps: '60', muted: true, startedAtMs: 1234, assignments: [], paused: null, ...over };
+  return { wallpaperId: 'drift:7', media: null, target: 'Desktop', displays: 'Same', fps: '60', muted: true, startedAtMs: 1234, assignments: [], paused: null, held: false, ...over };
 }
 
 async function fresh() {
@@ -119,9 +119,21 @@ describe('desktop actions', () => {
     await connectEngine();
     const displays = [{ display: 'Monitor #1', wallpaperId: 'drift:7', startedAtMs: 1234 }];
     engine.listener!(running({ assignments: displays, paused: 'On battery power' }));
-    expect(getState().current).toEqual({ id: 'drift:7', startedAtMs: 1234, displays, paused: 'On battery power' });
+    expect(getState().current).toEqual({ id: 'drift:7', startedAtMs: 1234, displays, paused: 'On battery power', held: false });
     engine.listener!(null);
     expect(getState().current).toBeNull();
+  });
+
+  it('keeps what the desktop showed as recents, newest first, each display counted', async () => {
+    const { connectEngine, getState } = await fresh();
+    await connectEngine();
+    engine.listener!(running({ wallpaperId: 'drift:3' }));
+    engine.listener!(running({ wallpaperId: 'drift:7' }));
+    engine.listener!(running({ wallpaperId: 'drift:3', assignments: [{ display: 'Side', wallpaperId: 'drift:9', startedAtMs: 1 }] }));
+    expect(getState().recents).toEqual(['drift:3', 'drift:9', 'drift:7']);
+    // Stopping forgets nothing.
+    engine.listener!(null);
+    expect(getState().recents).toEqual(['drift:3', 'drift:9', 'drift:7']);
   });
 
   it('joins a wallpaper that is already running instead of applying again', async () => {

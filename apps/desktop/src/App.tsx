@@ -7,6 +7,7 @@ import { refreshPlan, restoreSession } from './lib/account';
 import { connectEngine } from './lib/actions';
 import { setPlayback, syncSystemSettings } from './lib/platform';
 import { getState, useApp } from './lib/store';
+import { connectTray } from './lib/trayBridge';
 import { checkForUpdates, downloadAndInstall } from './lib/updater';
 import { Browse } from './screens/Browse';
 import { Detail } from './screens/Detail';
@@ -42,6 +43,9 @@ export function App() {
       clearTimeout(t);
     };
   }, []);
+
+  // The tray popover shows what this window knows and asks it to act.
+  useEffect(() => connectTray(), []);
 
   // Coming back to Drift is when the plan most likely changed (a purchase in the browser, Pro
   // bought on the phone) and when another device's edits are worth pulling in. Refreshing the

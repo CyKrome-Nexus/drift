@@ -7,9 +7,10 @@ import { artCss, loopPositionMs, pickFile, type Wallpaper } from '@drift/core';
  *
  * `startedAtMs` joins a running loop: the preview starts at the same point the desktop
  * wallpaper is at, so the two show the same frame. Without it the loop starts from the top.
+ * `small` previews (the tray) play the provider's small clip rather than a full-size file.
  */
-export function Art({ w, paused = false, still = false, startedAtMs }: { w: Wallpaper; paused?: boolean; still?: boolean; startedAtMs?: number }) {
-  if (w.media) return <MediaArt w={w} paused={paused} still={still} startedAtMs={startedAtMs} />;
+export function Art({ w, paused = false, still = false, small = false, startedAtMs }: { w: Wallpaper; paused?: boolean; still?: boolean; small?: boolean; startedAtMs?: number }) {
+  if (w.media) return <MediaArt w={w} paused={paused} still={still} small={small} startedAtMs={startedAtMs} />;
   return <GeneratedArt w={w} paused={paused} still={still} startedAtMs={startedAtMs} />;
 }
 
@@ -37,13 +38,13 @@ function windowPixels(): number {
   return Math.min(1080, Math.round(window.innerHeight * (window.devicePixelRatio || 1)));
 }
 
-function MediaArt({ w, paused, still, startedAtMs }: { w: Wallpaper; paused: boolean; still: boolean; startedAtMs?: number }) {
+function MediaArt({ w, paused, still, small, startedAtMs }: { w: Wallpaper; paused: boolean; still: boolean; small: boolean; startedAtMs?: number }) {
   const media = w.media!;
   const ref = useRef<HTMLVideoElement>(null);
   // Big previews (hero, detail) play the real file at the window's size: it is what the desktop
   // will show. If it can't load, the provider's small preview clip; failing that, the poster.
   const [sources] = useState(() =>
-    [pickFile(media.files, windowPixels())?.url, media.preview].filter(
+    (small ? [media.preview, pickFile(media.files, 360)?.url] : [pickFile(media.files, windowPixels())?.url, media.preview]).filter(
       (u, i, all): u is string => !!u && all.indexOf(u) === i,
     ),
   );

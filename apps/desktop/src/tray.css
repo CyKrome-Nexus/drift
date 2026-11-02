@@ -1,0 +1,103 @@
+/* The tray popover (src/tray.tsx). The window behind it is the OS's translucent menu material
+   (src-tauri/src/tray.rs); this page tints it toward Nocturne and lays out a menu on it. */
+
+html, body { height: auto; }
+body { background: transparent; font-size: 13px; line-height: 1.3; user-select: none; -webkit-user-select: none; cursor: default; }
+#root { height: auto; }
+
+.tray {
+  position: relative; overflow: hidden;
+  border-radius: 12px;
+  padding: 5px 5px 6px;
+  background: color-mix(in srgb, var(--color-bg) 62%, transparent);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  color: var(--color-text);
+}
+/* Under plain `vite` there is no material behind the page. */
+.tray.is-preview { width: 264px; margin: 24px; background: var(--color-bg); }
+
+.tray-panel { display: flex; flex-direction: column; animation: trayIn 0.16s ease; }
+.tray-panel.is-sub { animation-name: traySub; }
+@keyframes trayIn { from { opacity: 0.4; } }
+@keyframes traySub { from { opacity: 0; transform: translateX(10px); } }
+@media (prefers-reduced-motion: reduce) { .tray-panel { animation: none; } }
+
+/* — preview — */
+.tray-preview {
+  position: relative; overflow: hidden; flex: none;
+  margin: -5px -5px 0; aspect-ratio: 16 / 10;
+  border-radius: 12px 12px 0 0;
+  background: var(--color-surface);
+}
+.tray-preview .art { position: absolute; inset: 0; }
+.tray-preview-shade {
+  position: absolute; inset: 45% 0 0;
+  background: linear-gradient(180deg, transparent, rgba(10, 11, 20, 0.72));
+  pointer-events: none;
+}
+.tray-preview-label {
+  position: absolute; left: 12px; right: 12px; bottom: 9px;
+  display: flex; flex-direction: column; gap: 1px;
+  font-size: 12px; font-weight: 500; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+.tray-preview-paused { font-size: 11px; font-weight: 400; color: var(--color-neutral-300); }
+.tray-preview.is-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  width: calc(100% + 10px); border: 0; padding: 0; font: inherit; color: var(--color-text); cursor: pointer;
+  background:
+    radial-gradient(120% 90% at 20% 0%, color-mix(in srgb, var(--color-accent) 35%, transparent), transparent 60%),
+    var(--color-surface);
+}
+.tray-preview-hint { font-size: 11px; color: var(--color-neutral-400); }
+
+.tray-meta {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 8px 10px 3px; font-size: 12px; color: var(--color-neutral-500);
+}
+.tray-meta-queue { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tray-sep { height: 1px; margin: 5px 10px; background: rgba(255, 255, 255, 0.12); flex: none; }
+
+/* — playback controls — */
+.tray-controls { display: flex; justify-content: space-around; padding: 1px 8px; }
+.tray-icon {
+  width: 38px; height: 32px; display: grid; place-items: center;
+  border: 0; border-radius: 7px; padding: 0; background: none; color: var(--color-text); cursor: pointer;
+  transition: background 0.12s, transform 0.12s;
+}
+.tray-icon:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); }
+.tray-icon:active:not(:disabled) { transform: scale(0.92); }
+.tray-icon:disabled { color: var(--color-neutral-600); cursor: default; }
+.tray-icon[aria-pressed="true"] { color: var(--color-accent-400); }
+
+/* — items — */
+.tray-item {
+  display: flex; align-items: center; gap: 8px; min-height: 26px;
+  border: 0; border-radius: 6px; padding: 3px 10px; background: none;
+  font: inherit; font-size: 13px; color: var(--color-text); text-align: left; cursor: pointer;
+}
+.tray-item:hover:not(:disabled), .tray-item:focus-visible { background: color-mix(in srgb, var(--color-accent) 62%, transparent); outline: none; }
+.tray-item:disabled { color: var(--color-neutral-600); cursor: default; }
+.tray-item-label { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.tray-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tray-item-value { color: var(--color-neutral-500); font-size: 12px; white-space: nowrap; }
+.tray-item:hover:not(:disabled) .tray-item-value { color: var(--color-neutral-200); }
+.tray-more { color: var(--color-neutral-400); flex: none; }
+.tray-check { color: var(--color-accent-300); flex: none; }
+.tray-item:hover:not(:disabled) .tray-check, .tray-item:hover:not(:disabled) .tray-more { color: var(--color-text); }
+.tray-crown { color: var(--color-accent-300); flex: none; }
+
+.tray-thumb {
+  position: relative; overflow: hidden; flex: none;
+  width: 34px; height: 21px; border-radius: 4px; background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.tray-stat { padding: 2px 10px; font-size: 13px; color: var(--color-neutral-500); font-variant-numeric: tabular-nums; }
+
+.tray-back {
+  display: flex; align-items: center; gap: 6px; height: 28px;
+  border: 0; border-radius: 6px; padding: 0 8px; background: none;
+  font: inherit; font-size: 13px; font-weight: 500; color: var(--color-text); cursor: pointer;
+}
+.tray-back:hover { background: rgba(255, 255, 255, 0.1); }

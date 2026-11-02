@@ -92,8 +92,10 @@ export interface Assignment {
 export interface Running extends ApplyRequest {
   startedAtMs: number;
   assignments: Assignment[];
-  /** Why playback is paused (battery, a fullscreen app, a busy CPU), or null while it plays. */
+  /** Why playback is paused (battery, a fullscreen app, a busy CPU, or the user), or null while it plays. */
   paused: string | null;
+  /** Paused by the user (the tray's pause button) until they resume or apply another wallpaper. */
+  held: boolean;
 }
 
 /** A connected display, in physical pixels. Main display first. */
@@ -128,6 +130,32 @@ export interface Playback {
 
 export async function setPlayback(playback: Playback): Promise<void> {
   if (inTauri) await invoke('set_playback', { playback });
+}
+
+/** Pause or resume the wallpaper by hand, whatever the pause rules say. */
+export async function setPaused(paused: boolean): Promise<void> {
+  if (inTauri) await invoke('set_paused', { paused });
+}
+
+/** Drift's CPU (percent of one core) and memory, its webview helpers included, and its cache, in bytes. */
+export interface Usage {
+  cpu: number;
+  memory: number;
+  cache: number;
+}
+
+export async function usage(): Promise<Usage | null> {
+  return inTauri ? invoke<Usage>('usage') : null;
+}
+
+/** Empty the webviews' caches; resolves to the bytes freed. */
+export async function clearCache(): Promise<number> {
+  return inTauri ? invoke<number>('clear_cache') : 0;
+}
+
+/** Bring the main window forward (and close the tray popover). */
+export async function openMain(): Promise<void> {
+  if (inTauri) await invoke('open_main');
 }
 
 /** Set the lock screen to a still PNG. Windows only; elsewhere the engine says why it can't. */
