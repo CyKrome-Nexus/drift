@@ -1,12 +1,14 @@
 mod engine;
 mod media;
 mod secrets;
+mod stats;
+mod tray;
 
 use engine::{ApplyOutcome, ApplyRequest, Display, EngineState, Playback, Running};
 use serde::Serialize;
-use tauri::menu::{Menu, MenuItem};
-use tauri::tray::TrayIconBuilder;
+use stats::{StatsState, Usage};
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
+use tray::TrayState;
 
 // Async so window creation happens off the main thread; creating windows from a sync command
 // deadlocks on Windows.
@@ -29,6 +31,12 @@ async fn list_displays(app: AppHandle) -> Result<Vec<Display>, String> {
 #[tauri::command]
 async fn set_playback(app: AppHandle, playback: Playback) {
     engine::set_playback(&app, &app.state::<EngineState>(), playback);
+}
+
+/// Pause or resume the wallpaper by hand (the tray's pause button), whatever the pause rules say.
+#[tauri::command]
+async fn set_paused(app: AppHandle, paused: bool) {
+    engine::set_held(&app, &app.state::<EngineState>(), paused);
 }
 
 /// The body is the PNG itself (raw bytes, not JSON).
@@ -57,10 +65,25 @@ async fn download_wallpaper(url: String, dir: String, name: String, ext: String)
 /// Settings › General › "Show in system tray".
 #[tauri::command]
 fn set_tray_visible(app: AppHandle, visible: bool) -> Result<(), String> {
-    match app.tray_by_id("drift") {
+    if !visible {
+        tray::hide(&app);
+    }
+    match app.tray_by_id(tray::ID) {
         Some(tray) => tray.set_visible(visible).map_err(|e| e.to_string()),
         None => Ok(()),
     }
+}
+
+/// The tray's CPU, RAM and cache lines. Walks every process, so off the main thread.
+#[tauri::command]
+async fn usage(app: AppHandle) -> Result<Usage, String> {
+    tauri::async_runtime::spawn_blocking(move || stats::usage(&app, &app.state::<StatsState>())).await.map_err(|e| e.to_string())
+}
+
+/// Empty the webviews' caches; returns the bytes freed.
+#[tauri::command]
+async fn clear_cache(app: AppHandle) -> Result<u64, String> {
+    tauri::async_runtime::spawn_blocking(move || stats::clear_cache(&app)).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -118,50 +141,12 @@ fn fit_to_display(window: &tauri::WebviewWindow) {
     ));
 }
 
-fn show_main(app: &AppHandle) {
-    if let Some(main) = app.get_webview_window("main") {
-        let _ = main.show();
-        let _ = main.unminimize();
-        let _ = main.set_focus();
-    }
-}
-
-/// Menu-bar / tray icon: the way back into Drift while the window is hidden behind a running
-/// wallpaper.
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Open Drift", true, None::<&str>)?;
-    let stop = MenuItem::with_id(app, "stop", "Remove wallpaper", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Drift", true, Some("CmdOrCtrl+Q"))?;
-    let menu = Menu::with_items(app, &[&open, &stop, &quit])?;
-
-    let mut tray = TrayIconBuilder::with_id("drift").tooltip("Drift").menu(&menu).on_menu_event(|app, event| match event.id().as_ref() {
-        "open" => show_main(app),
-        // Off the main thread: an apply in progress may be waiting on the main thread to build
-        // its window, and stopping waits for that apply.
-        "stop" => {
-            let app = app.clone();
-            std::thread::spawn(move || engine::stop(&app, &app.state::<EngineState>()));
-        }
-        "quit" => {
-            let app = app.clone();
-            std::thread::spawn(move || {
-                engine::stop(&app, &app.state::<EngineState>());
-                app.exit(0);
-            });
-        }
-        _ => {}
-    });
-    if let Some(icon) = app.default_window_icon() {
-        tray = tray.icon(icon.clone());
-    }
-    tray.build(app)?;
-    Ok(())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
         .manage(EngineState::default())
+        .manage(TrayState::default())
+        .manage(StatsState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init());
 
@@ -173,7 +158,7 @@ pub fn run() {
 
     let app = builder
         .setup(|app| {
-            build_tray(app.handle())?;
+            tray::build(app.handle())?;
             engine::start_monitor(app.handle().clone());
             if let Some(main) = app.get_webview_window("main") {
                 fit_to_display(&main);
@@ -185,15 +170,21 @@ pub fn run() {
             }
             Ok(())
         })
-        .on_window_event(|window, event| {
+        .on_window_event(|window, event| match event {
             // Closing the window must not take the wallpaper with it: while one is running, the
-            // close button hides Drift to the tray instead of quitting.
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" && window.app_handle().state::<EngineState>().is_running() {
-                    api.prevent_close();
+            // close button hides Drift to the tray instead of quitting. With nothing running it
+            // quits, which the hidden tray popover would otherwise prevent.
+            WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
+                api.prevent_close();
+                if window.app_handle().state::<EngineState>().is_running() {
                     let _ = window.hide();
+                } else {
+                    window.app_handle().exit(0);
                 }
             }
+            // The popover behaves like a menu: clicking anywhere else closes it.
+            WindowEvent::Focused(false) if window.label() == tray::LABEL => tray::hide(window.app_handle()),
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             apply_wallpaper,
@@ -201,10 +192,17 @@ pub fn run() {
             current_wallpaper,
             list_displays,
             set_playback,
+            set_paused,
             set_lock_screen,
             set_lock_screen_url,
             download_wallpaper,
             set_tray_visible,
+            usage,
+            clear_cache,
+            tray::tray_fit,
+            tray::tray_hide,
+            tray::open_main,
+            tray::quit_app,
             system_info,
             secrets::session_token_get,
             secrets::session_token_set,
@@ -222,7 +220,7 @@ pub fn run() {
         // Clicking the Dock icon brings a hidden window back.
         #[cfg(target_os = "macos")]
         if let RunEvent::Reopen { .. } = _event {
-            show_main(_app);
+            tray::show_main(_app);
         }
     });
 }

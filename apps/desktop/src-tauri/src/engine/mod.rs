@@ -81,6 +81,8 @@ pub const LABEL_PREFIX: &str = "wallpaper-";
 /// Emitted to the app whenever the running wallpaper changes, including from the tray, a
 /// display being plugged in, or playback pausing.
 pub const CHANGED_EVENT: &str = "wallpaper-changed";
+/// The pause reason while the user has paused playback.
+const HELD: &str = "Paused";
 /// How often the monitor thread looks at power, fullscreen apps, CPU and displays.
 const TICK: Duration = Duration::from_secs(2);
 
@@ -141,8 +143,10 @@ pub struct Running {
     pub started_at_ms: u64,
     /// What each connected display shows.
     pub assignments: Vec<Assignment>,
-    /// Why playback is paused (battery, fullscreen app, CPU), or `None` while it plays.
+    /// Why playback is paused (battery, fullscreen app, CPU, or the user), or `None` while it plays.
     pub paused: Option<String>,
+    /// Paused by the user (the tray's pause button), whatever the conditions say.
+    pub held: bool,
 }
 
 /// Playback settings the app pushes whenever they change ([`set_playback`]).
@@ -266,6 +270,8 @@ pub struct EngineState {
     /// What [`current`](Self::current) returns; only ever held for a copy.
     snapshot: Mutex<Option<Running>>,
     running: AtomicBool,
+    /// Paused by the user until they resume or apply another wallpaper.
+    held: AtomicBool,
     playback: Mutex<Playback>,
     conditions: Mutex<Conditions>,
 }
@@ -287,6 +293,14 @@ impl EngineState {
 
     fn playback(&self) -> Playback {
         lock(&self.playback).clone()
+    }
+
+    /// Why a window covering `displays` should be paused right now, if it should.
+    fn pause_for(&self, playback: &Playback, c: &Conditions, displays: &[String]) -> Option<String> {
+        if self.held.load(Ordering::SeqCst) {
+            return Some(HELD.into());
+        }
+        pause_reason(playback, c, displays)
     }
 
     /// Publish what is running to the app; the app hears about it only when it changed.
@@ -442,7 +456,7 @@ fn layout<R: Runtime>(app: &AppHandle<R>, state: &EngineState, inner: &mut Inner
     for want in create {
         inner.generation += 1;
         let label = format!("{LABEL_PREFIX}{}", inner.generation);
-        let page = PagePlayback { paused: pause_reason(&playback, &conditions, &want.displays), fps: playback.fps.clone(), quality: playback.quality.clone() };
+        let page = PagePlayback { paused: state.pause_for(&playback, &conditions, &want.displays), fps: playback.fps.clone(), quality: playback.quality.clone() };
         let payload = PagePayload { wallpaper_id: want.wallpaper_id.clone(), media: want.media.clone(), started_at_ms: want.started_at_ms, muted };
         let init = script(&payload, &page)?;
         let window = WebviewWindowBuilder::new(app, &label, WebviewUrl::App("wallpaper.html".into()))
@@ -514,8 +528,10 @@ pub fn apply<R: Runtime>(app: &AppHandle<R>, state: &EngineState, req: ApplyRequ
 
     let note = (req.displays == "Span" && !os::span_supported() && displays.len() > 1)
         .then(|| "This desktop can't span one window across displays, so each display shows the whole loop".to_string());
-    let paused = inner.running.as_ref().and_then(|r| r.paused.clone());
-    inner.running = Some(Running { request: req, started_at_ms, assignments, paused });
+    // A wallpaper chosen while paused is one the user wants to see play.
+    state.held.store(false, Ordering::SeqCst);
+    let paused = inner.running.as_ref().and_then(|r| r.paused.clone()).filter(|p| p != HELD);
+    inner.running = Some(Running { request: req, started_at_ms, assignments, paused, held: false });
 
     let result = layout(app, state, &mut inner, displays);
     if let Err(e) = result {
@@ -538,9 +554,17 @@ pub fn stop<R: Runtime>(app: &AppHandle<R>, state: &EngineState) {
     close_all(app, &mut inner);
     inner.running = None;
     inner.displays.clear();
+    state.held.store(false, Ordering::SeqCst);
     drop(inner);
     os::after_stop();
     state.publish(app, None);
+}
+
+/// Pause or resume every wallpaper, whatever the pause rules say. Resuming rejoins the shared
+/// clock, as it does after any pause.
+pub fn set_held<R: Runtime>(app: &AppHandle<R>, state: &EngineState, held: bool) {
+    state.held.store(held, Ordering::SeqCst);
+    refresh(app, state, None);
 }
 
 /// New playback settings from the app. Takes effect on running wallpapers immediately.
@@ -568,7 +592,7 @@ fn refresh<R: Runtime>(app: &AppHandle<R>, state: &EngineState, displays: Option
     let mut paused_overall: Option<String> = None;
     let mut all_paused = !inner.windows.is_empty();
     for placed in &inner.windows {
-        let page = PagePlayback { paused: pause_reason(&playback, &conditions, &placed.want.displays), fps: playback.fps.clone(), quality: playback.quality.clone() };
+        let page = PagePlayback { paused: state.pause_for(&playback, &conditions, &placed.want.displays), fps: playback.fps.clone(), quality: playback.quality.clone() };
         match &page.paused {
             Some(reason) => paused_overall = paused_overall.or(Some(reason.clone())),
             None => all_paused = false,
@@ -585,6 +609,7 @@ fn refresh<R: Runtime>(app: &AppHandle<R>, state: &EngineState, displays: Option
     };
     if let Some(running) = inner.running.as_mut() {
         running.paused = paused;
+        running.held = state.held.load(Ordering::SeqCst);
     }
     let running = inner.running.clone();
     drop(inner);
@@ -667,7 +692,7 @@ mod tests {
     }
 
     fn running(id: &str, displays: &str, assignments: Vec<Assignment>) -> Running {
-        Running { request: req(id, displays), started_at_ms: 100, assignments, paused: None }
+        Running { request: req(id, displays), started_at_ms: 100, assignments, paused: None, held: false }
     }
 
     fn two_displays() -> Vec<Display> {
@@ -753,6 +778,16 @@ mod tests {
         assert_eq!(pause_reason(&off, &cpu, &main), None);
 
         assert_eq!(pause_reason(&on, &Conditions::default(), &main), None);
+    }
+
+    #[test]
+    fn holding_pauses_whatever_the_rules_say() {
+        let state = EngineState::default();
+        let off = Playback { pause_on_battery: false, pause_fullscreen: false, pause_high_cpu: false, ..Playback::default() };
+        let main = vec!["Monitor #1".to_string()];
+        assert_eq!(state.pause_for(&off, &Conditions::default(), &main), None);
+        state.held.store(true, Ordering::SeqCst);
+        assert_eq!(state.pause_for(&off, &Conditions::default(), &main).as_deref(), Some("Paused"));
     }
 
     #[test]

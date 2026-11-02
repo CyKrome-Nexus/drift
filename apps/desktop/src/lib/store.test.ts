@@ -76,7 +76,7 @@ describe('desktop store', () => {
 
   it('does not persist what the engine reports as running', async () => {
     const first = await freshStore();
-    first.setState({ current: { id: 'drift:2', startedAtMs: 1, displays: [], paused: null } });
+    first.setState({ current: { id: 'drift:2', startedAtMs: 1, displays: [], paused: null, held: false } });
     const second = await freshStore();
     expect(second.getState().current).toBeNull();
   });
@@ -93,6 +93,7 @@ describe('desktop store', () => {
           { display: 'Side', wallpaperId: 'coverr:2', startedAtMs: 200 },
         ],
         paused: null,
+        held: false,
       },
     });
     expect(liveSince(getState(), 'coverr:2')).toBe(200);

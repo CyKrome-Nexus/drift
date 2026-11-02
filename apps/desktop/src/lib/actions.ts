@@ -15,9 +15,9 @@ import {
   type Running,
 } from './platform';
 import { stillFrame } from './paint';
-import { getState, setState, toast, type Current } from './store';
+import { RECENTS_MAX, getState, setState, toast, type AppState, type Current } from './store';
 
-function request(w: Wallpaper, target: string, display: string | null = null): ApplyRequest {
+export function request(w: Wallpaper, target: string, display: string | null = null): ApplyRequest {
   const { settings } = getState();
   return { wallpaperId: w.id, media: w.media, target, displays: settings.monitors, fps: settings.fps, muted: settings.muteAudio, display };
 }
@@ -110,7 +110,15 @@ export async function download(shown: Wallpaper): Promise<void> {
 let resumed: Promise<void> | null = null;
 
 function toCurrent(r: Running): Current {
-  return { id: r.wallpaperId, startedAtMs: r.startedAtMs, displays: r.assignments ?? [], paused: r.paused ?? null };
+  return { id: r.wallpaperId, startedAtMs: r.startedAtMs, displays: r.assignments ?? [], paused: r.paused ?? null, held: r.held ?? false };
+}
+
+/** `recents` with what `r` shows moved to the front. */
+function withRecent(s: AppState, r: Running): Pick<AppState, 'recents'> | Record<string, never> {
+  const shown = [r.wallpaperId, ...(r.assignments ?? []).map((a) => a.wallpaperId)];
+  const fresh = shown.filter((id, i) => shown.indexOf(id) === i);
+  if (fresh.every((id, i) => s.recents[i] === id)) return {};
+  return { recents: [...fresh, ...s.recents.filter((id) => !fresh.includes(id))].slice(0, RECENTS_MAX) };
 }
 
 function follow(r: Running | null): void {
@@ -120,7 +128,7 @@ function follow(r: Running | null): void {
     return;
   }
   const perDisplay = r.displays === 'Per display' ? { lastDisplays: (r.assignments ?? []).map((a) => ({ display: a.display, wallpaperId: a.wallpaperId })) } : {};
-  setState({ current: toCurrent(r), ...perDisplay });
+  setState((s) => ({ current: toCurrent(r), ...perDisplay, ...withRecent(s, r) }));
 }
 
 export async function connectEngine(): Promise<() => void> {

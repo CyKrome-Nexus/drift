@@ -13,7 +13,7 @@ export default defineConfig({
   envPrefix: ['VITE_', 'TAURI_ENV_'],
   build: {
     target: 'es2022',
-    // Two pages: the app, and the one each desktop wallpaper window loads.
-    rollupOptions: { input: { main: 'index.html', wallpaper: 'wallpaper.html' } },
+    // Three pages: the app, the one each desktop wallpaper window loads, and the tray popover.
+    rollupOptions: { input: { main: 'index.html', wallpaper: 'wallpaper.html', tray: 'tray.html' } },
   },
 });

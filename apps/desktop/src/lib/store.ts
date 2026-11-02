@@ -44,8 +44,19 @@ export interface Current {
   startedAtMs: number;
   /** What each display shows, each with its own loop clock ("Per display" can differ). */
   displays: Assignment[];
-  /** Why playback is paused (battery, fullscreen app, CPU), or null while it plays. */
+  /** Why playback is paused (battery, fullscreen app, CPU, or the user), or null while it plays. */
   paused: string | null;
+  /** Paused by the user from the tray. */
+  held: boolean;
+}
+
+/** What the tray's previous / next walk through: favourites or one of the lists. */
+export type QueueSource = 'favs' | `list:${string}`;
+
+/** The frame rate and quality "Reduce CPU/RAM" replaced, to put back when it is turned off. */
+export interface Saver {
+  fps: DesktopSettings['fps'];
+  quality: DesktopSettings['quality'];
 }
 
 /** A display's wallpaper, kept for "Resume last wallpaper on startup" with "Per display". */
@@ -77,7 +88,18 @@ export interface AppState {
   lastApplied: ApplyRequest | null;
   /** Each display's wallpaper the last time "Per display" ran, for the same. */
   lastDisplays: DisplayChoice[];
+  /** Wallpapers the desktop has shown, newest first. */
+  recents: WallpaperId[];
+  /** The list the tray last played; previous / next walk it. */
+  queue: QueueSource | null;
+  /** Next picks at random from the queue. */
+  shuffle: boolean;
+  /** Set while "Reduce CPU/RAM" is on. */
+  saver: Saver | null;
 }
+
+/** How many recent wallpapers to remember. */
+export const RECENTS_MAX = 10;
 
 const STORAGE_KEY = 'drift.desktop.v1';
 const KNOWN_KEY = 'drift.desktop.known.v1';
@@ -92,6 +114,10 @@ interface Persisted {
   updatePrefs: UpdatePrefs;
   lastApplied: ApplyRequest | null;
   lastDisplays: DisplayChoice[];
+  recents: WallpaperId[];
+  queue: QueueSource | null;
+  shuffle: boolean;
+  saver: Saver | null;
 }
 
 const DEFAULT_UPDATE_PREFS: UpdatePrefs = { mode: 'notify', checkOnStartup: true };
@@ -125,6 +151,10 @@ function load(): Persisted {
           .map((d: any) => ({ display: d?.display, wallpaperId: migrateId(d?.wallpaperId) }))
           .filter((d: any): d is DisplayChoice => typeof d.display === 'string' && d.wallpaperId !== null)
       : [],
+    recents: Array.isArray(raw.recents) ? migrateIds(raw.recents).slice(0, RECENTS_MAX) : [],
+    queue: raw.queue === 'favs' || (typeof raw.queue === 'string' && raw.queue.startsWith('list:')) ? raw.queue : null,
+    shuffle: raw.shuffle === true,
+    saver: typeof raw.saver?.fps === 'string' && typeof raw.saver?.quality === 'string' ? { fps: raw.saver.fps, quality: raw.saver.quality } : null,
   };
 }
 
@@ -144,6 +174,7 @@ function pruneKnown(s: AppState): Record<WallpaperId, Wallpaper> {
     ...s.lists.flatMap((l) => l.items),
     ...(s.lastApplied ? [s.lastApplied.wallpaperId] : []),
     ...s.lastDisplays.map((d) => d.wallpaperId),
+    ...s.recents,
     ...(s.current ? [s.current.id, ...s.current.displays.map((d) => d.wallpaperId)] : []),
   ]);
   const ids = Object.keys(s.known);
@@ -166,7 +197,19 @@ let state: AppState = {
   current: null,
 };
 
-const PERSISTED_KEYS: ReadonlyArray<keyof Persisted> = ['favs', 'lists', 'following', 'settings', 'updatePrefs', 'lastApplied', 'lastDisplays'];
+const PERSISTED_KEYS: ReadonlyArray<keyof Persisted> = [
+  'favs',
+  'lists',
+  'following',
+  'settings',
+  'updatePrefs',
+  'lastApplied',
+  'lastDisplays',
+  'recents',
+  'queue',
+  'shuffle',
+  'saver',
+];
 let knownTimer: ReturnType<typeof setTimeout> | undefined;
 
 const listeners = new Set<() => void>();
@@ -180,8 +223,8 @@ export function setState(patch: Partial<AppState> | ((s: AppState) => Partial<Ap
   state = { ...state, ...next };
   if (PERSISTED_KEYS.some((k) => k in next)) {
     try {
-      const { favs, lists, following, settings, updatePrefs, lastApplied, lastDisplays } = state;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ favs, lists, following, settings, updatePrefs, lastApplied, lastDisplays } satisfies Persisted));
+      const saved = Object.fromEntries(PERSISTED_KEYS.map((k) => [k, state[k]])) as unknown as Persisted;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
     } catch {
       // Storage full or blocked: the session still works, it just will not be remembered.
     }
