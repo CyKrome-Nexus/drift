@@ -1,10 +1,12 @@
 // Which providers are on, from the build's environment — the way the CDS backend picks its
 // storage and payment providers. Swapping or adding a provider is an env change:
 //
-//   WALLPAPER_PROVIDERS   Comma-separated, in priority order. Default: coverr,nasa,drift
-//   COVERR_API_KEY        Coverr's key. Free (Demo) or paid (Production): same key, same API.
+//   WALLPAPER_PROVIDERS   Comma-separated, in priority order. Default: pexels,pixabay,drift
+//   PEXELS_API_KEY        Pexels' key (free: 200 requests an hour).
+//   PIXABAY_API_KEY       Pixabay's key (free: 100 requests a minute).
+//   COVERR_API_KEY        Coverr's key, for `coverr`. Free (Demo) or paid (Production).
 //   COVERR_API_URL        Optional; Coverr's own API unless testing.
-//   NASA_ASSETS_URL       Optional; NASA's own asset host unless testing.
+//   NASA_ASSETS_URL       Optional; NASA's own asset host unless testing (`nasa` needs no key).
 //
 // Each app reads these with its bundler's prefix (VITE_ on the desktop, EXPO_PUBLIC_ on the
 // phone). A provider listed without what it needs is skipped and reported (`skipped`), never
@@ -18,13 +20,17 @@
 import { coverrProvider, type CoverrConfig } from './providers/coverr';
 import { driftProvider } from './providers/drift';
 import { nasaProvider, type NasaConfig } from './providers/nasa';
+import { pexelsProvider, type PexelsConfig } from './providers/pexels';
+import { pixabayProvider, type PixabayConfig } from './providers/pixabay';
 import type { ProviderContext, WallpaperProvider } from './types';
 
-export const DEFAULT_PROVIDERS: readonly string[] = ['coverr', 'nasa', 'drift'];
+export const DEFAULT_PROVIDERS: readonly string[] = ['pexels', 'pixabay', 'drift'];
 
 export interface WallpaperConfig {
   /** Provider names in priority order. */
   providers: string[];
+  pexels?: PexelsConfig;
+  pixabay?: PixabayConfig;
   coverr?: CoverrConfig;
   nasa?: NasaConfig;
 }
@@ -33,6 +39,8 @@ type Factory = (config: WallpaperConfig, ctx: ProviderContext) => WallpaperProvi
 
 /** Every provider Drift knows. A new one is an adapter in providers/ and a line here. */
 export const PROVIDER_FACTORIES: Record<string, Factory> = {
+  pexels: (c, ctx) => (c.pexels?.apiKey ? pexelsProvider(c.pexels, ctx) : { missing: 'PEXELS_API_KEY' }),
+  pixabay: (c, ctx) => (c.pixabay?.apiKey ? pixabayProvider(c.pixabay, ctx) : { missing: 'PIXABAY_API_KEY' }),
   coverr: (c, ctx) => (c.coverr?.apiKey ? coverrProvider(c.coverr, ctx) : { missing: 'COVERR_API_KEY' }),
   nasa: (c, ctx) => nasaProvider(c.nasa ?? {}, ctx),
   drift: () => driftProvider(),
@@ -47,8 +55,12 @@ export function configFromEnv(env: Record<string, string | undefined>, prefix = 
   const list = read('WALLPAPER_PROVIDERS');
   const providers = list ? list.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean) : [...DEFAULT_PROVIDERS];
   const coverrKey = read('COVERR_API_KEY');
+  const pexelsKey = read('PEXELS_API_KEY');
+  const pixabayKey = read('PIXABAY_API_KEY');
   return {
     providers: [...new Set(providers)],
+    pexels: pexelsKey ? { apiKey: pexelsKey } : undefined,
+    pixabay: pixabayKey ? { apiKey: pixabayKey } : undefined,
     coverr: coverrKey ? { apiKey: coverrKey, baseUrl: read('COVERR_API_URL') } : undefined,
     nasa: { assetsUrl: read('NASA_ASSETS_URL') },
   };

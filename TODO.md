@@ -74,14 +74,17 @@ the right heading.
 - [x] ~~Phone: Home, Explore, Library and detail read provider feeds; previews with `expo-video` (the provider's short clip)~~
 - [x] ~~Android: live wallpaper downloads the video once and plays it with `MediaPlayer` on the wallpaper surface~~
 - [x] ~~iOS: Live Photo from three seconds of the video~~
-- [ ] **Owner:** get a Coverr API key (coverr.co/developers) and set `VITE_COVERR_API_KEY` / `EXPO_PUBLIC_COVERR_API_KEY` for builds; until then Ambient, Abstract and Nature show the generated set
+- [x] ~~Coverr key: not needed now that Pexels and Pixabay are the default providers~~
 - [ ] Watch real playback: desktop wallpaper video on macOS, Windows and Linux; the hero/detail video in `tauri dev` (Chrome's background-tab check could not)
 - [ ] **Owner:** rebuild the phone dev builds (`expo-video` is a new native module), then try a Coverr and a NASA wallpaper on Android (live) and iOS (Live Photo)
 - [ ] Coverr's logo next to its credit (its terms ask for Coverr attribution; Drift shows a text credit and link today)
-- [ ] Portrait loops for the phone: prefer Coverr's vertical videos in phone feeds (landscape videos are cropped to the centre today)
+- [x] ~~Pexels and Pixabay providers (free stock video, personal use), on by default; Coverr and NASA stay available by env (docs/wallpapers.md)~~
+- [x] ~~Portrait loops for the phone: the phone's catalog asks Pexels for portrait footage and keeps portrait videos from popular lists and Pixabay when there are enough~~
+- [ ] **Owner:** create a Pexels key (pexels.com/api/new) and a Pixabay key (pixabay.com/api/docs, shown when signed in) and set `VITE_PEXELS_API_KEY` / `VITE_PIXABAY_API_KEY` and the `EXPO_PUBLIC_` pair in `apps/desktop/.env` and `apps/mobile/.env`
+- [ ] Before distributing Drift publicly: Pexels' API terms forbid wallpaper apps and Pixabay's licence forbids standalone redistribution; switch the public build to Coverr / NASA or licensed sources
 - [ ] Phone downloads open the file in the browser; save straight to Photos / Files instead
 - [ ] Download folder picker, cache size and Clear cache (desktop)
-- [x] ~~Tests for providers: Coverr and NASA mapping, env selection, merging and fallback, caching, file picking, id migration, provider apply / lock screen / download on both apps, native download host rules (147 JS tests in all, plus 15 Rust)~~
+- [x] ~~Tests for providers: Coverr and NASA mapping, env selection, merging and fallback, caching, file picking, id migration, provider apply / lock screen / download on both apps, native download host rules (156 JS tests in all, plus 15 Rust)~~
 - [ ] Wallpaper audio and "Mute wallpaper audio"
 - [ ] Creators: follow, profiles, real ratings and apply counts
 - [ ] Share links

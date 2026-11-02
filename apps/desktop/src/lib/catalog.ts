@@ -1,5 +1,5 @@
 // The wallpaper catalog for the desktop: the providers the build's env switches on (see
-// @drift/wallpapers config.ts — VITE_WALLPAPER_PROVIDERS, VITE_COVERR_API_KEY), plus hooks that
+// @drift/wallpapers config.ts — VITE_WALLPAPER_PROVIDERS, VITE_PEXELS_API_KEY, …), plus hooks that
 // keep what they return in the store's `known` cache.
 
 import { useCallback, useEffect, useRef, useState } from 'react';

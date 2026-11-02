@@ -1,5 +1,5 @@
 // The wallpaper catalog for the phone: the providers the build's env switches on (see
-// @drift/wallpapers config.ts — EXPO_PUBLIC_WALLPAPER_PROVIDERS, EXPO_PUBLIC_COVERR_API_KEY),
+// @drift/wallpapers config.ts — EXPO_PUBLIC_WALLPAPER_PROVIDERS, EXPO_PUBLIC_PEXELS_API_KEY, …),
 // plus hooks that keep what they return in the store's `known` cache. Same as the desktop's,
 // against the phone's store.
 
@@ -11,10 +11,14 @@ import { getState, remember, useApp } from './store';
 // Expo inlines EXPO_PUBLIC_ variables only where each is read by name.
 const env = {
   EXPO_PUBLIC_WALLPAPER_PROVIDERS: process.env.EXPO_PUBLIC_WALLPAPER_PROVIDERS,
+  EXPO_PUBLIC_PEXELS_API_KEY: process.env.EXPO_PUBLIC_PEXELS_API_KEY,
+  EXPO_PUBLIC_PIXABAY_API_KEY: process.env.EXPO_PUBLIC_PIXABAY_API_KEY,
   EXPO_PUBLIC_COVERR_API_KEY: process.env.EXPO_PUBLIC_COVERR_API_KEY,
 };
 
 export const catalog = createCatalog(configFromEnv(env, 'EXPO_PUBLIC_'), {
+  // Phone screens are tall: providers that can, return portrait loops.
+  orientation: 'portrait',
   onError: (provider, error) => console.warn(`[catalog] ${provider}:`, error instanceof Error ? error.message : error),
 });
 

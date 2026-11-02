@@ -7,6 +7,7 @@
 // so they are free in Drift, not Pro.
 
 import { huesOf, initialsOf, loopLabel, resolutionLabel, type Category, type Wallpaper } from '@drift/core';
+import { CATEGORY_QUERIES, categoryFromTags, rotation } from '../categories';
 import { ProviderError, type Feed, type FeedPage, type ProviderContext, type WallpaperProvider } from '../types';
 
 export interface CoverrConfig {
@@ -14,21 +15,8 @@ export interface CoverrConfig {
   baseUrl?: string;
 }
 
-/** What Drift searches Coverr for, per category. Pages rotate through the list. */
-export const COVERR_QUERIES: Record<Category, readonly string[]> = {
-  Ambient: ['rain window', 'ocean waves', 'clouds timelapse', 'fog', 'candle', 'snow falling'],
-  Cosmos: ['night sky', 'stars timelapse', 'northern lights', 'milky way'],
-  Abstract: ['abstract', 'ink water', 'smoke', 'particles', 'bokeh', 'liquid'],
-  Nature: ['forest', 'waterfall', 'flowers', 'mountains', 'river', 'leaves'],
-};
-
-/** Tags that place a trending or searched video in a category. */
-const CATEGORY_TAGS: Record<Category, readonly string[]> = {
-  Cosmos: ['space', 'stars', 'star', 'galaxy', 'night sky', 'milky way', 'aurora', 'northern lights', 'moon', 'planet'],
-  Abstract: ['abstract', 'ink', 'smoke', 'particles', 'bokeh', 'liquid', 'pattern', 'texture', 'light leaks'],
-  Nature: ['nature', 'forest', 'tree', 'trees', 'waterfall', 'flowers', 'mountain', 'mountains', 'river', 'leaves', 'jungle'],
-  Ambient: [],
-};
+/** What Drift searches Coverr for, per category: the shared list (categories.ts). */
+export const COVERR_QUERIES = CATEGORY_QUERIES;
 
 interface CoverrVideo {
   id: string;
@@ -49,12 +37,6 @@ interface CoverrList {
   page: number;
   pages: number;
   hits: CoverrVideo[];
-}
-
-export function categoryFromTags(tags: readonly string[] | undefined, fallback: Category = 'Ambient'): Category {
-  const set = new Set((tags ?? []).map((t) => t.toLowerCase()));
-  for (const c of ['Cosmos', 'Abstract', 'Nature'] as const) if (CATEGORY_TAGS[c].some((t) => set.has(t))) return c;
-  return fallback;
 }
 
 /** A Coverr video in Drift's shape. Null when it has no playable file. */
@@ -147,11 +129,9 @@ export function coverrProvider(config: CoverrConfig, ctx: ProviderContext): Wall
           return { items: r.items, next: r.page + 1 < r.pages ? page + 1 : null };
         }
         case 'category': {
-          const queries = COVERR_QUERIES[feed.category];
-          const query = queries[page % queries.length];
-          const own = Math.floor(page / queries.length);
+          const { query, page: own, queries } = rotation(feed.category, page);
           const r = await list({ query, page: own, page_size: size }, feed.category);
-          const more = own + 1 < r.pages || page + 1 < queries.length;
+          const more = own + 1 < r.pages || page + 1 < queries;
           return { items: r.items, next: more ? page + 1 : null };
         }
       }

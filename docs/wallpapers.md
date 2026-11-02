@@ -4,11 +4,16 @@ Drift shows real wallpapers from **providers**: stock-video APIs that Drift read
 `Wallpaper` shape (`packages/core/src/catalog.ts`) and merges into one catalog
 (`packages/wallpapers`). No screen knows which provider a wallpaper came from.
 
-| Provider | What | Key | Limits | Terms Drift follows |
+| Provider | What | Key | Limits | On by default |
 |---|---|---|---|---|
-| `coverr` | Stock video loops (ambient, nature, abstract, night sky) | `COVERR_API_KEY` | Free "Demo" key: 50 requests/hour. Paid Coverr plan: 2,000/hour, same key and API | Credit Coverr wherever its videos show; record a download when one is applied or saved; never sell the videos on their own, so they are free in Drift |
-| `nasa` | Hand-picked public-domain footage of Earth, the Sun and the planets (`NASA_PICKS`) | none | none for these files | Credit NASA; never imply NASA endorses Drift |
-| `drift` | Drift's 24 generated gradient loops | none | none | Drift's own. Shown only where no other provider has anything (offline, or a category no provider covers) |
+| `pexels` | The largest free stock-video library; portrait videos for the phone | `PEXELS_API_KEY` | 200 requests/hour, 20,000/month (raised on request) | yes |
+| `pixabay` | Free stock video, strong on nature, backgrounds and abstract motion | `PIXABAY_API_KEY` | 100 requests/minute | yes |
+| `drift` | Drift's 24 generated gradient loops | none | none | always, as the fallback where no provider has anything |
+| `coverr` | Stock video loops | `COVERR_API_KEY` | 50/hour free, 2,000/hour on a paid Coverr plan | no, add it to the list |
+| `nasa` | Hand-picked public-domain footage of Earth, the Sun and the planets (`NASA_PICKS`) | none | none | no, add it to the list |
+
+Every provider's wallpapers carry a credit (videographer and provider) that the app shows, and are
+free tier.
 
 Ids are `<provider>:<provider's id>`: `coverr:S1YbPl1NfI`, `nasa:GSFC_20170412_Lights_m12573_EarthAtNight`,
 `drift:6`. Favourites, lists and history saved before providers (plain numbers) are read as
@@ -18,22 +23,26 @@ Ids are `<provider>:<provider's id>`: `coverr:S1YbPl1NfI`, `nasa:GSFC_20170412_L
 
 ```sh
 # Desktop: apps/desktop/.env       Phone: apps/mobile/.env (EXPO_PUBLIC_ prefix)
-VITE_WALLPAPER_PROVIDERS=coverr,nasa,drift   # priority order; this is the default
-VITE_COVERR_API_KEY=…
+VITE_WALLPAPER_PROVIDERS=pexels,pixabay,drift   # priority order; this is the default
+VITE_PEXELS_API_KEY=…     # https://www.pexels.com/api/new/
+VITE_PIXABAY_API_KEY=…    # https://pixabay.com/api/docs/ (shown when signed in)
 ```
 
 A provider listed without its key is skipped with a console warning, never fatal; `drift` is
 always added last. Pages interleave the providers in order and drop repeats. Answers are cached
 for 30 minutes, and searches wait for typing to pause, because free keys have hourly limits.
 
-## Why these providers, and not others
+The phone's catalog asks for portrait footage (Pexels filters by it; for Pixabay and popular
+lists Drift keeps the portrait videos when there are enough), the desktop's for landscape.
 
-- **Unsplash and Pexels forbid wallpaper apps** in their API terms ("unofficial clients, wallpaper
-  applications"; "including making Pexels content available as a wallpaper app").
-- **Pixabay** forbids hotlinking and distributing content "on a Standalone basis", which is what a
-  wallpaper app does with an unedited file.
-- **NASA's library search** is mostly narrated features, interviews and news, so NASA is a curated
-  list, not a live search. Add picks to `NASA_PICKS` after checking the files exist.
+## Licensing: personal use
+
+Drift is a personal project, and Pexels and Pixabay are used as personal-use sources. Before Drift
+is distributed to others, revisit them: Pexels' API terms forbid "making Pexels content available
+as a wallpaper app", Unsplash's forbid wallpaper applications, and Pixabay's licence forbids
+distributing content on a standalone basis. Coverr (commercial use allowed) and NASA (public
+domain) are the providers that hold up for a public release; they stay available behind the same
+env switch. NASA's library search is mostly narrated features and news, so NASA is a curated list.
 
 ## Going paid
 

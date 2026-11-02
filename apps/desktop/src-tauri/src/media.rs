@@ -12,7 +12,16 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Where provider media lives. Keep in step with `img-src` / `media-src` in tauri.conf.json.
-pub const MEDIA_HOSTS: &[&str] = &["storage.coverr.co", "images-assets.nasa.gov"];
+pub const MEDIA_HOSTS: &[&str] = &[
+    "videos.pexels.com",
+    "images.pexels.com",
+    // Older Pexels answers link files through Vimeo.
+    "player.vimeo.com",
+    "cdn.pixabay.com",
+    "i.vimeocdn.com",
+    "storage.coverr.co",
+    "images-assets.nasa.gov",
+];
 
 pub fn allowed(url: &str) -> Result<(), String> {
     let rest = url.strip_prefix("https://").ok_or("only https media can be fetched")?;
@@ -93,6 +102,8 @@ mod tests {
     fn fetches_only_https_on_provider_hosts() {
         assert!(allowed("https://storage.coverr.co/videos/abc?token=t").is_ok());
         assert!(allowed("https://images-assets.nasa.gov/video/x/x~large.mp4").is_ok());
+        assert!(allowed("https://videos.pexels.com/video-files/1/hd.mp4").is_ok());
+        assert!(allowed("https://cdn.pixabay.com/video/2024/01/01/1_large.mp4").is_ok());
         assert!(allowed("http://images-assets.nasa.gov/video/x").is_err());
         assert!(allowed("https://evil.example/x.mp4").is_err());
         assert!(allowed("https://storage.coverr.co.evil.example/x").is_err());

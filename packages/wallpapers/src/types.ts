@@ -25,6 +25,11 @@ export type Fetch = (url: string, init?: { headers?: Record<string, string>; met
 
 export interface ProviderContext {
   fetch: Fetch;
+  /**
+   * The shape the app shows wallpapers in: the desktop is landscape, the phone portrait.
+   * Providers that can filter by it do; the rest return either.
+   */
+  orientation: 'landscape' | 'portrait';
 }
 
 export interface WallpaperProvider {
