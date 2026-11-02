@@ -80,7 +80,11 @@ the right heading.
 - [ ] Coverr's logo next to its credit (its terms ask for Coverr attribution; Drift shows a text credit and link today)
 - [x] ~~Pexels and Pixabay providers (free stock video, personal use), on by default; Coverr and NASA stay available by env (docs/wallpapers.md)~~
 - [x] ~~Portrait loops for the phone: the phone's catalog asks Pexels for portrait footage and keeps portrait videos from popular lists and Pixabay when there are enough~~
-- [ ] **Owner:** create a Pexels key (pexels.com/api/new) and a Pixabay key (pixabay.com/api/docs, shown when signed in) and set `VITE_PEXELS_API_KEY` / `VITE_PIXABAY_API_KEY` and the `EXPO_PUBLIC_` pair in `apps/desktop/.env` and `apps/mobile/.env`
+- [x] ~~Bring your own keys: Drift ships with no provider keys; a welcome screen on first launch (desktop and phone) links to each provider's free key page, checks the pasted key, and keeps it in the OS credential store (desktop) or Secure Store (phone); Skip browses Drift's generated loops~~
+- [x] ~~Settings › Wallpaper sources: add, check or remove Pexels and Pixabay keys; feeds switch over without a restart~~
+- [x] ~~Tests: key merging and checking, keychain load/save/remove, welcome shown once (162 JS tests in all, plus 16 Rust)~~
+- [ ] Look at the welcome screen and Settings › Wallpaper sources in `tauri dev` and on a phone (not seen yet: the browser check needed a choice of Chrome)
+- [ ] **Owner:** create your own Pexels and Pixabay keys and paste them into the welcome screen
 - [ ] Before distributing Drift publicly: Pexels' API terms forbid wallpaper apps and Pixabay's licence forbids standalone redistribution; switch the public build to Coverr / NASA or licensed sources
 - [ ] Phone downloads open the file in the browser; save straight to Photos / Files instead
 - [ ] Download folder picker, cache size and Clear cache (desktop)

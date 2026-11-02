@@ -208,7 +208,10 @@ pub fn run() {
             system_info,
             secrets::session_token_get,
             secrets::session_token_set,
-            secrets::session_token_clear
+            secrets::session_token_clear,
+            secrets::provider_key_get,
+            secrets::provider_key_set,
+            secrets::provider_key_clear
         ])
         .build(tauri::generate_context!())
         .expect("error while building Drift");

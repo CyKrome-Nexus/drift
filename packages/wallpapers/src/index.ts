@@ -1,6 +1,7 @@
 export * from './types';
 export * from './config';
 export * from './catalog';
+export * from './keys';
 export { CATEGORY_QUERIES, categoryFromTags, rotation } from './categories';
 export { pexelsProvider, fromPexels, titleFromUrl, type PexelsConfig } from './providers/pexels';
 export { pixabayProvider, fromPixabay, titleFromTags, type PixabayConfig } from './providers/pixabay';
