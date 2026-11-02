@@ -34,7 +34,7 @@ const NAV: Array<[Section, ComponentType<IconProps>]> = [
 
 const HEADINGS: Record<Section, [string, string]> = {
   General: ['General', 'Changes apply instantly to every running wallpaper.'],
-  'Wallpaper sources': ['Wallpaper sources', 'Connect your own free Pexels and Pixabay keys to browse their videos.'],
+  'Wallpaper sources': ['Wallpaper sources', 'Your own free provider keys. Name them as you like; add more with “Add provider”.'],
   Playback: ['Playback', 'When loops play, pause, and how fast.'],
   Performance: ['Performance', 'Trade fidelity for battery and GPU headroom.'],
   Displays: ['Displays', 'How wallpapers spread across your screens.'],

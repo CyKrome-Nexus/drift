@@ -4,7 +4,7 @@ import { TopBar } from './components/TopBar';
 import { TrafficLights } from './components/TrafficLights';
 import { UpgradeDialog } from './components/UpgradeDialog';
 import { Welcome } from './components/Welcome';
-import { loadKeys, onboarded } from './lib/catalog';
+import { loadConnections, onboarded } from './lib/catalog';
 import { refreshPlan, restoreSession } from './lib/account';
 import { connectEngine } from './lib/actions';
 import { setPlayback, syncSystemSettings } from './lib/platform';
@@ -26,7 +26,7 @@ export function App() {
   // First launch: connect wallpaper sources (or skip). Keys load before anything is fetched.
   const [welcome, setWelcome] = useState(() => !onboarded());
   useEffect(() => {
-    void loadKeys();
+    void loadConnections();
   }, []);
 
   useEffect(() => {

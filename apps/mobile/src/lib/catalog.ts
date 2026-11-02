@@ -1,26 +1,29 @@
 // The wallpaper catalog for the phone, plus hooks that keep what it returns in the store's
 // `known` cache. Same as the desktop's, against the phone's store.
 //
-// Providers run on the user's own keys (the welcome screen, Settings › Wallpaper sources), kept
-// in Secure Store; see @drift/wallpapers keys.ts. A build may still set keys in .env
-// (EXPO_PUBLIC_PEXELS_API_KEY, …) for development; the user's win. Saving or removing a key
-// rebuilds the providers behind `catalog`, and every feed on screen reloads.
+// Providers run on the user's own keys, as connections (the welcome screen, Settings › Wallpaper
+// sources; see @drift/wallpapers keys.ts): the list in AsyncStorage, each key in Secure Store. A
+// build may still set keys in .env (EXPO_PUBLIC_PEXELS_API_KEY, …) for development; they come
+// after the user's. Changing a connection rebuilds the providers behind `catalog`, and every feed
+// on screen reloads.
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import type { Wallpaper, WallpaperId } from '@drift/core';
 import {
-  KEY_PROVIDERS,
-  cleanKeys,
+  cleanName,
   configFromEnv,
   createCatalog,
+  defaultName,
   feedKey,
-  withKeys,
+  newConnectionId,
+  sanitizeConnections,
+  withConnections,
   type Catalog,
+  type Connection,
+  type ConnectionType,
   type Feed,
-  type KeyedProvider,
-  type ProviderKeys,
 } from '@drift/wallpapers';
 import { getState, remember, useApp } from './store';
 
@@ -35,24 +38,40 @@ const BUILD = configFromEnv(
   'EXPO_PUBLIC_',
 );
 
-function build(keys: ProviderKeys): Catalog {
-  return createCatalog(withKeys(BUILD, keys), {
+let connections: Connection[] = [];
+const keys: Record<string, string> = {};
+
+function build(): Catalog {
+  const keyed = connections.filter((c) => keys[c.id]).map((c) => ({ ...c, key: keys[c.id] }));
+  return createCatalog(withConnections(BUILD, keyed), {
     // Phone screens are tall: providers that can, return portrait loops.
     orientation: 'portrait',
     onError: (provider, error) => console.warn(`[catalog] ${provider}:`, error instanceof Error ? error.message : error),
   });
 }
 
-let current = build({});
-let keys: ProviderKeys = {};
-let version = 0;
-const listeners = new Set<() => void>();
+export interface ConnectionState extends Connection {
+  /** A key is saved for it. */
+  connected: boolean;
+}
 
-function rebuild(next: ProviderKeys): void {
-  keys = cleanKeys(next);
-  current = build(keys);
+let current = build();
+let version = 0;
+let snapshot: ConnectionState[] = [];
+const listeners = new Set<() => void>();
+const listListeners = new Set<() => void>();
+
+/** Tell the connection list's readers it changed. */
+function publish(): void {
+  snapshot = connections.map((c) => ({ ...c, connected: !!keys[c.id] }));
+  listListeners.forEach((l) => l());
+}
+
+function rebuild(): void {
+  current = build();
   version++;
   listeners.forEach((l) => l());
+  publish();
 }
 
 /** The catalog. Stable to hold on to: it always answers from the current providers. */
@@ -79,37 +98,90 @@ export function useCatalogVersion(): number {
   );
 }
 
-// ---- the user's own keys ----------------------------------------------------------------------
+// ---- the user's connections -------------------------------------------------------------------
 
-const secureKey = (p: KeyedProvider) => `drift.key.${p}`;
+const CONNECTIONS_KEY = 'drift.mobile.connections.v1';
 const SOURCES_KEY = 'drift.mobile.sources.v1';
+const secureKey = (id: string) => `drift.key.${id}`;
 
-/** Read the saved keys and switch their providers on. Call once at startup. */
-export async function loadKeys(): Promise<void> {
-  const saved: ProviderKeys = {};
-  for (const { name } of KEY_PROVIDERS) {
+const saveList = () => AsyncStorage.setItem(CONNECTIONS_KEY, JSON.stringify(connections)).catch(() => {});
+
+/** The first build kept one key per provider, under the provider's name: make them connections. */
+async function carryOverOldKeys(): Promise<void> {
+  for (const type of ['pexels', 'pixabay'] as const) {
+    const key = await SecureStore.getItemAsync(secureKey(type)).catch(() => null);
+    if (!key) continue;
+    const c: Connection = { id: newConnectionId(type), type, name: defaultName(type, connections) };
+    await SecureStore.setItemAsync(secureKey(c.id), key);
+    await SecureStore.deleteItemAsync(secureKey(type)).catch(() => {});
+    connections = [...connections, c];
+    keys[c.id] = key;
+  }
+  if (connections.length) await saveList();
+}
+
+/** Read the saved connections and their keys, and switch their providers on. Call once at startup. */
+export async function loadConnections(): Promise<void> {
+  let raw: unknown = null;
+  try {
+    raw = JSON.parse((await AsyncStorage.getItem(CONNECTIONS_KEY)) ?? 'null');
+  } catch {
+    // Unreadable: no connections.
+  }
+  connections = sanitizeConnections(raw);
+  for (const c of connections) {
     try {
-      const k = await SecureStore.getItemAsync(secureKey(name));
-      if (k) saved[name] = k;
+      const k = await SecureStore.getItemAsync(secureKey(c.id));
+      if (k) keys[c.id] = k;
     } catch (err) {
-      console.warn(`[catalog] could not read the ${name} key`, err);
+      console.warn(`[catalog] could not read the key for ${c.name}`, err);
     }
   }
-  if (Object.keys(saved).length) rebuild(saved);
+  if (raw === null) await carryOverOldKeys();
+  rebuild();
 }
 
-/** Save (or with null, remove) the user's key for `provider`, and use it at once. */
-export async function setKey(provider: KeyedProvider, key: string | null): Promise<void> {
-  const k = key?.trim() || null;
-  if (k) await SecureStore.setItemAsync(secureKey(provider), k);
-  else await SecureStore.deleteItemAsync(secureKey(provider));
-  rebuild({ ...keys, [provider]: k ?? undefined });
+/** Add a connection with its key, and use it at once. */
+export async function addConnection(type: ConnectionType, name: string, key: string): Promise<Connection> {
+  const c: Connection = { id: newConnectionId(type), type, name: cleanName(name, type) };
+  await SecureStore.setItemAsync(secureKey(c.id), key.trim());
+  keys[c.id] = key.trim();
+  connections = [...connections, c];
+  await saveList();
+  rebuild();
+  return c;
 }
 
-/** Which providers the user has a key saved for. */
-export function useKeys(): Record<KeyedProvider, boolean> {
-  useCatalogVersion();
-  return Object.fromEntries(KEY_PROVIDERS.map((p) => [p.name, !!keys[p.name]])) as Record<KeyedProvider, boolean>;
+export function renameConnection(id: string, name: string): void {
+  connections = connections.map((c) => (c.id === id ? { ...c, name: cleanName(name, c.type) } : c));
+  void saveList();
+  // Names don't change what is fetched: the feeds stay, only the list re-renders.
+  publish();
+}
+
+export async function replaceKey(id: string, key: string): Promise<void> {
+  await SecureStore.setItemAsync(secureKey(id), key.trim());
+  keys[id] = key.trim();
+  rebuild();
+}
+
+export async function removeConnection(id: string): Promise<void> {
+  await SecureStore.deleteItemAsync(secureKey(id)).catch(() => {});
+  delete keys[id];
+  connections = connections.filter((c) => c.id !== id);
+  await saveList();
+  rebuild();
+}
+
+/** The user's connections, in order. */
+export function useConnections(): ConnectionState[] {
+  return useSyncExternalStore(
+    (l) => {
+      listListeners.add(l);
+      return () => listListeners.delete(l);
+    },
+    () => snapshot,
+  );
 }
 
 /** Whether the welcome screen has been answered (keys added, or skipped). */

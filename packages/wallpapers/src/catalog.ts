@@ -2,7 +2,7 @@
 //
 // - Pages interleave the providers in priority order and drop repeats.
 // - Fallback providers (Drift's generated set) appear only where no other provider has anything
-//   for that feed: with Coverr and NASA on, Drift shows their wallpapers; offline, or for a
+//   for that feed: with Pexels and Pixabay on, Drift shows their wallpapers; offline, or for a
 //   category no provider covers, it shows its own.
 // - A provider that fails is reported (`onError`) and treated as empty, so one outage or a spent
 //   rate limit never blanks the screen.

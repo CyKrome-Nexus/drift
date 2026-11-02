@@ -10,7 +10,7 @@ import { color } from '@drift/tokens';
 import { Toast } from '../components/Toast';
 import { refreshPlan, restoreSession } from '../lib/account';
 import { checkFollowedCreators, wallpaperFromResponse } from '../lib/notifications';
-import { loadKeys, onboarded } from '../lib/catalog';
+import { loadConnections, onboarded } from '../lib/catalog';
 import { getState, loadPersisted, useApp } from '../lib/store';
 
 void SplashScreen.preventAutoHideAsync();
@@ -36,7 +36,7 @@ export default function RootLayout() {
     // The session reads the library to sync it, so it waits for the saved one to load.
     void loadPersisted().then(restoreSession);
     // The user's own provider keys, before the first feed is worth fetching.
-    void loadKeys();
+    void loadConnections();
   }, []);
 
   // Back in the foreground is when the plan most likely changed (bought on another device, or a

@@ -398,7 +398,14 @@ html, body { background: transparent; overflow: hidden; }
 .sources { display: flex; flex-direction: column; gap: 12px; }
 .source-card { border: 1px solid var(--color-divider); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: color-mix(in srgb, var(--color-surface) 70%, transparent); }
 .source-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.source-name { font-size: 15px; font-weight: 500; }
+.source-name-input {
+  font: inherit; font-size: 15px; font-weight: 500; color: var(--color-text); background: transparent; width: 100%;
+  border: 1px solid transparent; border-radius: 6px; padding: 2px 6px; margin-left: -7px;
+}
+.source-name-input:hover { border-color: var(--color-divider); }
+.source-name-input:focus-visible { border-color: var(--color-accent); outline: none; }
+.source-add { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.source-add-btn { align-self: flex-start; }
 .source-status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--color-neutral-400); white-space: nowrap; }
 .source-status.is-on { color: var(--color-accent); }
 .source-steps { margin: 0; padding-left: 18px; color: var(--color-neutral-300); font-size: 12px; line-height: 1.6; }

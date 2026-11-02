@@ -1,5 +1,5 @@
-// Providers and the merged catalog, against a fake fetch that answers like Coverr and NASA do
-// (shapes from https://api.coverr.co/docs/videos/ and a real NASA collection.json). No network.
+// Providers and the merged catalog, against a fake fetch that answers like Pexels, Pixabay and
+// Coverr do (shapes from their API documentation). No network.
 
 import { describe, expect, it, vi } from 'vitest';
 import { pickFile, providerOf } from '@drift/core';
@@ -11,7 +11,6 @@ import {
   fromPexels,
   fromPixabay,
   interleave,
-  NASA_PICKS,
   resolveProviders,
   titleFromUrl,
   type Fetch,
@@ -58,17 +57,19 @@ describe('config from env', () => {
       pexels: { apiKey: 'p' },
       pixabay: { apiKey: 'x' },
     });
-    const c = configFromEnv({ VITE_WALLPAPER_PROVIDERS: ' NASA , coverr,nasa', VITE_COVERR_API_KEY: 'k' }, 'VITE_');
-    expect(c.providers).toEqual(['nasa', 'coverr']);
+    const c = configFromEnv({ VITE_WALLPAPER_PROVIDERS: ' PIXABAY , coverr,pixabay', VITE_COVERR_API_KEY: 'k' }, 'VITE_');
+    expect(c.providers).toEqual(['pixabay', 'coverr']);
     expect(c.coverr?.apiKey).toBe('k');
   });
 
   it('skips a provider that is missing its key or unknown, and always keeps Drift last', () => {
-    const { providers, skipped } = resolveProviders(configFromEnv({ WALLPAPER_PROVIDERS: 'coverr,pexels,nasa' }), { fetch: fakeFetch({}), orientation: 'landscape' });
-    expect(providers.map((p) => p.name)).toEqual(['nasa', 'drift']);
+    const env = { WALLPAPER_PROVIDERS: 'coverr,pexels,nasa', PEXELS_API_KEY: 'k' };
+    const { providers, skipped } = resolveProviders(configFromEnv(env), { fetch: fakeFetch({}), orientation: 'landscape' });
+    expect(providers.map((p) => p.name)).toEqual(['pexels', 'drift']);
     expect(skipped).toEqual([
       { name: 'coverr', reason: 'COVERR_API_KEY is not set' },
-      expect.objectContaining({ name: 'pexels' }),
+      // Removed providers are unknown now: an old .env still starts.
+      expect.objectContaining({ name: 'nasa' }),
     ]);
   });
 });
@@ -103,32 +104,9 @@ describe('Coverr', () => {
   });
 });
 
-describe('NASA', () => {
-  it('serves hand-picked footage with no request, all free and credited to NASA', async () => {
-    const log: string[] = [];
-    const catalog = createCatalog({ providers: ['nasa'] }, { fetch: fakeFetch({}, log) });
-    const page = await catalog.feed({ kind: 'category', category: 'Cosmos' });
-    expect(page.items.length).toBeGreaterThan(0);
-    expect(log).toEqual([]);
-    for (const w of page.items) {
-      expect(w.tier).toBe('free');
-      expect(w.credit.license).toMatch(/Public domain/);
-      expect(w.media!.files.length).toBeGreaterThan(0);
-    }
-  });
-
-  it('trusts the manifest over the table for which files exist', async () => {
-    const pick = NASA_PICKS[0];
-    const base = `http://images-assets.nasa.gov/video/${pick.id}/${pick.id}`;
-    const fetch = fakeFetch({ 'collection.json': [`${base}~orig.mp4`, `${base}~mobile.mp4`, `${base}~thumb.jpg`] });
-    const w = await createCatalog({ providers: ['nasa'] }, { fetch }).get(`nasa:${pick.id}`);
-    expect(w!.media!.files.map((f) => f.url.split('~')[1])).toEqual(['mobile.mp4', 'orig.mp4']);
-  });
-});
-
 describe('catalog', () => {
-  const coverrAndNasa = (routes: Record<string, unknown>) =>
-    createCatalog({ providers: ['coverr', 'nasa', 'drift'], coverr: { apiKey: 'k' } }, { fetch: fakeFetch(routes) });
+  const coverrAndPixabay = (routes: Record<string, unknown>) =>
+    createCatalog({ providers: ['coverr', 'pixabay', 'drift'], coverr: { apiKey: 'k' }, pixabay: { apiKey: 'k' } }, { fetch: fakeFetch(routes) });
 
   it('interleaves providers in order without repeats', () => {
     const a = [fromCoverr(video('1'))!, fromCoverr(video('2'))!];
@@ -137,9 +115,12 @@ describe('catalog', () => {
   });
 
   it('shows real wallpapers, not the generated set, when a provider has some', async () => {
-    const page = await coverrAndNasa({ '/videos?': list([video('a')]) }).feed({ kind: 'category', category: 'Cosmos' });
+    const page = await coverrAndPixabay({
+      'api.coverr.co': list([video('a')]),
+      'pixabay.com': { totalHits: 1, hits: [pixabayVideo(5)] },
+    }).feed({ kind: 'category', category: 'Cosmos' });
     const sources = new Set(page.items.map((w) => providerOf(w.id)));
-    expect(sources).toEqual(new Set(['coverr', 'nasa']));
+    expect(sources).toEqual(new Set(['coverr', 'pixabay']));
   });
 
   it('falls back to Drift’s generated wallpapers when every real provider fails', async () => {
@@ -152,7 +133,10 @@ describe('catalog', () => {
   });
 
   it('does not tack generated wallpapers onto the end of a real feed', async () => {
-    const catalog = coverrAndNasa({ '/videos?': (u: string) => list(u.includes('page=0') ? [video('a')] : [], 0, 1) });
+    const catalog = coverrAndPixabay({
+      'api.coverr.co': (u: string) => list(u.includes('page=0') ? [video('a')] : [], 0, 1),
+      'pixabay.com': { totalHits: 0, hits: [] },
+    });
     const first = await catalog.feed({ kind: 'search', query: 'zzz' }, 0);
     expect(first.items.map((w) => w.id)).toEqual(['coverr:a']);
     const second = await catalog.feed({ kind: 'search', query: 'zzz' }, 1);
@@ -320,17 +304,73 @@ describe('categories', () => {
   });
 });
 
-describe('bring your own keys', () => {
-  it('puts the user’s keys over the build’s, and switches their provider on before the fallback', async () => {
-    const { withKeys } = await import('./index');
-    const build = configFromEnv({ WALLPAPER_PROVIDERS: 'nasa,drift', PIXABAY_API_KEY: 'from-build' });
-    const c = withKeys(build, { pexels: '  mine  ', pixabay: '' });
-    expect(c.providers).toEqual(['nasa', 'pexels', 'drift']);
-    expect(c.pexels?.apiKey).toBe('mine');
-    expect(c.pixabay?.apiKey).toBe('from-build');
-    expect(withKeys(configFromEnv({}), { pixabay: 'p2' }).pixabay?.apiKey).toBe('p2');
-    // The build's config is left as it was.
-    expect(build.providers).toEqual(['nasa', 'drift']);
+describe('connections (bring your own keys)', () => {
+  const conn = (id: string, type: 'pexels' | 'pixabay' | 'coverr', key: string, name = type) => ({ id, type, name, key });
+
+  it('names connections after their provider, numbering repeats', async () => {
+    const { defaultName, cleanName } = await import('./index');
+    expect(defaultName('pexels', [])).toBe('Pexels');
+    expect(defaultName('pexels', [{ name: 'Pexels' }, { name: 'pexels 2' }])).toBe('Pexels 3');
+    expect(defaultName('pixabay', [{ name: 'Pexels' }])).toBe('Pixabay');
+    expect(cleanName('  Work   account  ', 'pexels')).toBe('Work account');
+    expect(cleanName('   ', 'coverr')).toBe('Coverr');
+    expect(cleanName('x'.repeat(60), 'pexels')).toHaveLength(40);
+  });
+
+  it('reads back only well-formed connections, each once', async () => {
+    const { sanitizeConnections } = await import('./index');
+    expect(
+      sanitizeConnections([
+        { id: 'pexels-abc12345', type: 'pexels', name: ' Mine ' },
+        { id: 'pexels-abc12345', type: 'pexels', name: 'again' },
+        { id: 'pixabay-zz99', type: 'pexels', name: 'wrong type' },
+        { id: 'nasa-12345', type: 'nasa', name: 'gone' },
+        { id: '../x', type: 'pexels' },
+        null,
+      ]),
+    ).toEqual([{ id: 'pexels-abc12345', type: 'pexels', name: 'Mine' }]);
+    expect(sanitizeConnections('nope')).toEqual([]);
+  });
+
+  it('turns connections into keys per provider, in the user’s order, ahead of the build’s', async () => {
+    const { withConnections } = await import('./index');
+    const build = configFromEnv({ WALLPAPER_PROVIDERS: 'pixabay,drift', PIXABAY_API_KEY: 'from-build' });
+    const c = withConnections(build, [
+      conn('pexels-a1', 'pexels', ' p1 '),
+      conn('pixabay-b1', 'pixabay', 'x1'),
+      conn('pexels-a2', 'pexels', 'p2'),
+      conn('coverr-c1', 'coverr', ''),
+    ]);
+    expect(c.providers).toEqual(['pexels', 'pixabay', 'drift']);
+    expect(c.pexels).toMatchObject({ apiKey: 'p1', apiKeys: ['p2'] });
+    // The build's own key comes after the user's.
+    expect(c.pixabay).toMatchObject({ apiKey: 'x1', apiKeys: ['from-build'] });
+    expect(c.coverr).toBeUndefined();
+    expect(build.providers).toEqual(['pixabay', 'drift']);
+  });
+
+  it('falls over to the next key when one is refused or spent, and stays on the one that works', async () => {
+    const { withConnections } = await import('./index');
+    const seen: string[] = [];
+    const fetch: Fetch = vi.fn(async (_url: string, init?: { headers?: Record<string, string> }) => {
+      const key = init!.headers!.Authorization;
+      seen.push(key);
+      if (key === 'spent') return { ok: false, status: 429, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => ({ videos: [pexelsVideo(1)], next_page: 'x' }) };
+    });
+    const config = withConnections({ providers: ['drift'] }, [conn('pexels-a1', 'pexels', 'spent'), conn('pexels-a2', 'pexels', 'good')]);
+    const catalog = createCatalog(config, { fetch });
+    expect((await catalog.feed({ kind: 'trending' })).items[0].id).toBe('pexels:1');
+    await catalog.feed({ kind: 'search', query: 'rain' });
+    expect(seen).toEqual(['spent', 'good', 'good']);
+  });
+
+  it('does not burn through keys for a problem that is not the key', async () => {
+    const { failover, ProviderError } = await import('./index');
+    const down = { name: 'pexels', label: 'Pexels', homepage: '', page: vi.fn(async () => { throw new ProviderError('pexels', 503, 'down'); }), get: vi.fn() };
+    const other = { ...down, page: vi.fn() };
+    await expect(failover([down, other]).page({ kind: 'trending' }, 0, 1)).rejects.toThrow('down');
+    expect(other.page).not.toHaveBeenCalled();
   });
 
   it('checks a key with one request and tells a bad key from a bad connection', async () => {
@@ -340,10 +380,11 @@ describe('bring your own keys', () => {
     expect(await verifyKey('pexels', 'k', answer(401))).toBe('invalid');
     expect(await verifyKey('pixabay', 'k', answer(400))).toBe('invalid');
     expect(await verifyKey('pixabay', 'k', answer(429))).toBe('unreachable');
+    expect(await verifyKey('coverr', 'k', answer(401))).toBe('invalid');
     expect(await verifyKey('pexels', 'k', vi.fn(async () => { throw new Error('offline'); }))).toBe('unreachable');
     expect(await verifyKey('pexels', '   ', answer(200))).toBe('invalid');
     const sent = answer(200);
-    await verifyKey('pexels', ' key ', sent);
-    expect((sent as any).mock.calls[0][1].headers.Authorization).toBe('key');
+    await verifyKey('coverr', ' key ', sent);
+    expect((sent as any).mock.calls[0][1].headers.Authorization).toBe('Bearer key');
   });
 });

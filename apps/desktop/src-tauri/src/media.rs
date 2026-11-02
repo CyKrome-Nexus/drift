@@ -20,7 +20,6 @@ pub const MEDIA_HOSTS: &[&str] = &[
     "cdn.pixabay.com",
     "i.vimeocdn.com",
     "storage.coverr.co",
-    "images-assets.nasa.gov",
 ];
 
 pub fn allowed(url: &str) -> Result<(), String> {
@@ -101,10 +100,9 @@ mod tests {
     #[test]
     fn fetches_only_https_on_provider_hosts() {
         assert!(allowed("https://storage.coverr.co/videos/abc?token=t").is_ok());
-        assert!(allowed("https://images-assets.nasa.gov/video/x/x~large.mp4").is_ok());
         assert!(allowed("https://videos.pexels.com/video-files/1/hd.mp4").is_ok());
         assert!(allowed("https://cdn.pixabay.com/video/2024/01/01/1_large.mp4").is_ok());
-        assert!(allowed("http://images-assets.nasa.gov/video/x").is_err());
+        assert!(allowed("http://videos.pexels.com/video-files/1/hd.mp4").is_err());
         assert!(allowed("https://evil.example/x.mp4").is_err());
         assert!(allowed("https://storage.coverr.co.evil.example/x").is_err());
         assert!(allowed("file:///etc/passwd").is_err());
@@ -125,13 +123,13 @@ mod tests {
         assert_eq!(expand_home("/tmp/x").unwrap(), PathBuf::from("/tmp/x"));
     }
 
-    /// Hits NASA's servers: `cargo test -- --ignored`.
+    /// Hits Pexels' servers: `cargo test -- --ignored`.
     #[test]
     #[ignore]
     fn downloads_a_real_file() {
         let dir = std::env::temp_dir().join(format!("drift-media-net-{}", std::process::id()));
-        let url = "https://images-assets.nasa.gov/video/GSFC_20190513_m4714_Lee_Lincoln_Scarp_Moon_Flyover/GSFC_20190513_m4714_Lee_Lincoln_Scarp_Moon_Flyover~thumb.jpg";
-        let path = download(url, dir.to_str().unwrap(), "Moon Flyover", "jpg").unwrap();
+        let url = "https://images.pexels.com/photos/2014422/pexels-photo-2014422.jpeg?w=64";
+        let path = download(url, dir.to_str().unwrap(), "Pexels photo", "jpg").unwrap();
         let bytes = std::fs::read(&path).unwrap();
         assert_eq!(&bytes[..3], &[0xFF, 0xD8, 0xFF], "a JPEG");
         assert!(!path.with_extension("part").exists());
