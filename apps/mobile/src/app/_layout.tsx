@@ -10,6 +10,7 @@ import { color } from '@drift/tokens';
 import { Toast } from '../components/Toast';
 import { refreshPlan, restoreSession } from '../lib/account';
 import { checkFollowedCreators, wallpaperFromResponse } from '../lib/notifications';
+import { loadConnections, onboarded } from '../lib/catalog';
 import { getState, loadPersisted, useApp } from '../lib/store';
 
 void SplashScreen.preventAutoHideAsync();
@@ -24,7 +25,7 @@ function openFromNotification(response: Notifications.NotificationResponse | nul
   if (id === null) return;
   // Handled: the next launch should not reopen it.
   Notifications.clearLastNotificationResponse();
-  router.push(`/wallpaper/${id}`);
+  router.push(`/wallpaper/${encodeURIComponent(id)}`);
 }
 
 export default function RootLayout() {
@@ -34,6 +35,8 @@ export default function RootLayout() {
   useEffect(() => {
     // The session reads the library to sync it, so it waits for the saved one to load.
     void loadPersisted().then(restoreSession);
+    // The user's own provider keys, before the first feed is worth fetching.
+    void loadConnections();
   }, []);
 
   // Back in the foreground is when the plan most likely changed (bought on another device, or a
@@ -60,6 +63,14 @@ export default function RootLayout() {
     return () => sub.remove();
   }, [ready]);
 
+  // First launch: connect wallpaper sources, or skip (once the navigator is up).
+  useEffect(() => {
+    if (!fontsLoaded || !ready) return;
+    void onboarded().then((done) => {
+      if (!done) router.push('/sources?welcome=1');
+    });
+  }, [fontsLoaded, ready]);
+
   // Wait for the navigator before following a tapped notification.
   useEffect(() => {
     if (!fontsLoaded || !ready) return;
@@ -83,6 +94,7 @@ export default function RootLayout() {
           <Stack.Screen name="upgrade" options={{ presentation: 'modal' }} />
           <Stack.Screen name="live-photo" options={{ presentation: 'modal' }} />
           <Stack.Screen name="shortcut-setup" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="sources" />
         </Stack>
         <Toast />
       </View>

@@ -21,6 +21,13 @@ html, body { background: transparent; overflow: hidden; }
 .art.is-moving { animation: wpFade 0.9s ease, wpDrift 16s ease-in-out infinite alternate; }
 .art.is-paused { animation-play-state: paused; }
 /* The desktop wallpaper page draws its own frames (src/wallpaper.tsx). */
+/* A provider's wallpaper: its poster or video over a tint of the generated art, which shows while it loads. */
+.art.art-tinted { background-size: cover; }
+.art-media { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; animation: wpFade 0.9s ease; }
+.wallpaper-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.credit { font-size: 11px; color: var(--color-neutral-400); display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.credit a, .credit button.link { color: var(--color-neutral-300); text-decoration: underline; text-underline-offset: 2px; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.load-more { display: flex; justify-content: center; padding: 18px 0 6px; }
 .wallpaper-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; animation: wpFade 0.9s ease; }
 
 /* — traffic lights — */
@@ -93,6 +100,7 @@ html, body { background: transparent; overflow: hidden; }
 
 /* — hero — */
 .hero { position: relative; height: 500px; overflow: hidden; }
+.hero.hero-loading { background: var(--color-surface); }
 .hero-shade-x {
   position: absolute; inset: 0;
   background: linear-gradient(90deg, color-mix(in srgb, var(--color-bg) 82%, transparent) 0%,
@@ -377,3 +385,31 @@ html, body { background: transparent; overflow: hidden; }
 .plan-phone { display: flex; flex-direction: column; gap: 4px; }
 .plan-stop { background: none; border: 0; padding: 0; color: var(--color-accent); cursor: pointer; font: inherit; }
 .spin { animation: spin 0.9s linear infinite; }
+
+/* Wallpaper sources: the welcome screen and Settings › Wallpaper sources. */
+.welcome {
+  position: absolute; inset: 0; z-index: 40; overflow-y: auto; display: flex; justify-content: center;
+  background: linear-gradient(160deg, var(--color-surface) 0%, var(--color-bg) 45%);
+}
+.welcome-col { width: min(640px, 100% - 48px); padding: 72px 0 48px; display: flex; flex-direction: column; gap: 14px; }
+.welcome-title { font-size: 34px; font-weight: 500; line-height: 1.1; margin: 0; }
+.welcome-lead { color: var(--color-neutral-300); font-size: 14px; line-height: 1.55; margin: 0 0 6px; }
+.welcome-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.sources { display: flex; flex-direction: column; gap: 12px; }
+.source-card { border: 1px solid var(--color-divider); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; background: color-mix(in srgb, var(--color-surface) 70%, transparent); }
+.source-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.source-name-input {
+  font: inherit; font-size: 15px; font-weight: 500; color: var(--color-text); background: transparent; width: 100%;
+  border: 1px solid transparent; border-radius: 6px; padding: 2px 6px; margin-left: -7px;
+}
+.source-name-input:hover { border-color: var(--color-divider); }
+.source-name-input:focus-visible { border-color: var(--color-accent); outline: none; }
+.source-add { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.source-add-btn { align-self: flex-start; }
+.source-status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--color-neutral-400); white-space: nowrap; }
+.source-status.is-on { color: var(--color-accent); }
+.source-steps { margin: 0; padding-left: 18px; color: var(--color-neutral-300); font-size: 12px; line-height: 1.6; }
+.source-row { display: flex; align-items: center; gap: 8px; }
+.source-error { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-error, #e88); }
+.source-note { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; line-height: 1.5; color: var(--color-neutral-400); margin: 2px 0 0; }
+.source-note svg { flex: none; margin-top: 2px; color: var(--color-accent); }

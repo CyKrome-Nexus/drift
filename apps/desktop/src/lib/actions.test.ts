@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { catalog } from '@drift/core';
+import { generatedWallpapers, type Wallpaper } from '@drift/core';
 import type { ApplyOutcome, ApplyRequest, Running } from './platform';
 
 // The engine lives in Rust; these tests stand in for it.
@@ -11,6 +11,9 @@ const engine = vi.hoisted(() => ({
   listener: null as ((r: Running | null) => void) | null,
   lockError: null as string | null,
   locked: 0,
+  lockUrls: [] as string[],
+  downloads: [] as Array<{ url: string; dir: string; name: string; ext: string }>,
+  used: [] as string[],
 }));
 
 vi.mock('./platform', () => ({
@@ -23,13 +26,27 @@ vi.mock('./platform', () => ({
     if (engine.lockError) throw new Error(engine.lockError);
     engine.locked++;
   }),
+  setLockScreenUrl: vi.fn(async (url: string) => {
+    engine.lockUrls.push(url);
+  }),
+  downloadFile: vi.fn(async (url: string, dir: string, name: string, ext: string) => {
+    engine.downloads.push({ url, dir, name, ext });
+    return `${dir}/${name}.${ext}`;
+  }),
+  revealFile: vi.fn(async () => {}),
+}));
+
+// Providers are not called: `resolve` hands back the wallpaper with its full file list.
+vi.mock('./catalog', () => ({
+  catalog: { used: vi.fn(async (w: { id: string }) => void engine.used.push(w.id)) },
+  resolve: vi.fn(async (w: Wallpaper) => w),
 }));
 
 // Canvas painting isn't available under jsdom; the bytes don't matter here.
 vi.mock('./paint', () => ({ stillFrame: vi.fn(async () => new Uint8Array([1, 2, 3])) }));
 
 function running(over: Partial<Running> = {}): Running {
-  return { wallpaperId: 7, target: 'Desktop', displays: 'Same', fps: '60', muted: true, startedAtMs: 1234, assignments: [], paused: null, ...over };
+  return { wallpaperId: 'drift:7', media: null, target: 'Desktop', displays: 'Same', fps: '60', muted: true, startedAtMs: 1234, assignments: [], paused: null, ...over };
 }
 
 async function fresh() {
@@ -39,13 +56,29 @@ async function fresh() {
   return { ...store, ...actions };
 }
 
-const free = catalog().find((w) => w.tier === 'free')!;
-const pro = catalog().find((w) => w.tier === 'pro')!;
+const free = generatedWallpapers().find((w) => w.tier === 'free')!;
+const pro = generatedWallpapers().find((w) => w.tier === 'pro')!;
+/** A provider's wallpaper: a real video, with a poster for lock screens. */
+const video: Wallpaper = {
+  ...free,
+  id: 'coverr:abc',
+  name: 'Rain on Glass',
+  publisher: 'Coverr',
+  media: {
+    kind: 'video',
+    poster: 'https://storage.coverr.co/p/abc',
+    thumbnail: 'https://storage.coverr.co/t/abc',
+    preview: 'https://storage.coverr.co/videos/abc/preview',
+    files: [{ url: 'https://storage.coverr.co/videos/abc', width: 3840, height: 2160, type: 'video/mp4' }],
+    durationMs: 12_000,
+  },
+  credit: { provider: 'Coverr', providerUrl: 'https://coverr.co', author: null, authorUrl: null, sourceUrl: null, license: 'Coverr License' },
+};
 
 describe('desktop actions', () => {
   beforeEach(() => {
     localStorage.clear();
-    Object.assign(engine, { inTauri: true, outcome: { live: true, note: null }, running: null, applied: [], listener: null, lockError: null, locked: 0 });
+    Object.assign(engine, { inTauri: true, outcome: { live: true, note: null }, running: null, applied: [], listener: null, lockError: null, locked: 0, lockUrls: [], downloads: [], used: [] });
   });
 
   it('applies a free wallpaper and remembers it', async () => {
@@ -84,19 +117,19 @@ describe('desktop actions', () => {
   it('follows the engine: current wallpaper, its loop start, each display and why it is paused', async () => {
     const { connectEngine, getState } = await fresh();
     await connectEngine();
-    const displays = [{ display: 'Monitor #1', wallpaperId: 7, startedAtMs: 1234 }];
+    const displays = [{ display: 'Monitor #1', wallpaperId: 'drift:7', startedAtMs: 1234 }];
     engine.listener!(running({ assignments: displays, paused: 'On battery power' }));
-    expect(getState().current).toEqual({ id: 7, startedAtMs: 1234, displays, paused: 'On battery power' });
+    expect(getState().current).toEqual({ id: 'drift:7', startedAtMs: 1234, displays, paused: 'On battery power' });
     engine.listener!(null);
     expect(getState().current).toBeNull();
   });
 
   it('joins a wallpaper that is already running instead of applying again', async () => {
-    engine.running = running({ wallpaperId: 3, startedAtMs: 42 });
+    engine.running = running({ wallpaperId: 'drift:3', startedAtMs: 42 });
     const { connectEngine, getState } = await fresh();
     await connectEngine();
     expect(engine.applied).toEqual([]);
-    expect(getState().current).toMatchObject({ id: 3, startedAtMs: 42 });
+    expect(getState().current).toMatchObject({ id: 'drift:3', startedAtMs: 42 });
   });
 
   it('sends the chosen display with a per-display apply', async () => {
@@ -183,6 +216,33 @@ describe('desktop actions', () => {
     const { connectEngine } = await fresh();
     await connectEngine();
     expect(engine.applied).toEqual([]);
+  });
+
+  it('sends a provider’s video to the engine, sets the lock screen from its poster, and tells the provider', async () => {
+    const { apply, getState } = await fresh();
+    await apply(video, 'Both');
+    expect(engine.applied[0]).toMatchObject({ wallpaperId: 'coverr:abc', media: video.media });
+    expect(engine.lockUrls).toEqual(['https://storage.coverr.co/p/abc']);
+    expect(engine.locked).toBe(0);
+    expect(engine.used).toEqual(['coverr:abc']);
+    expect(getState().toast?.text).toContain('is now your wallpaper and lock screen');
+  });
+
+  it('does not tell the provider about a wallpaper that never reached the screen', async () => {
+    engine.outcome = { live: false, note: 'engine offline' };
+    const { apply } = await fresh();
+    await apply(video, 'Desktop');
+    expect(engine.used).toEqual([]);
+  });
+
+  it('downloads a provider’s file into the download folder, and only real files', async () => {
+    const { download, getState } = await fresh();
+    await download(video);
+    expect(engine.downloads).toEqual([{ url: 'https://storage.coverr.co/videos/abc', dir: getState().settings.downloadDir, name: 'Rain on Glass', ext: 'mp4' }]);
+    expect(engine.used).toEqual(['coverr:abc']);
+    await download(free);
+    expect(engine.downloads).toHaveLength(1);
+    expect(getState().toast?.text).toContain('no file to save');
   });
 
   it('does nothing with the engine in a plain browser', async () => {

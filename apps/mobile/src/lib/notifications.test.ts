@@ -1,6 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
-import { catalog } from '@drift/core';
+import { generatedWallpapers } from '@drift/core';
 import { native } from '../test/fakes';
+
+// Providers are not called: the feed is the generated set, and `resolve` hands back what it gets.
+const provider = vi.hoisted(() => ({ used: [] as string[] }));
+vi.mock('./catalog', async () => {
+  const { generatedWallpapers } = await import('@drift/core');
+  return {
+    catalog: {
+      feed: async () => ({ items: generatedWallpapers(), next: null }),
+      used: async (w: { id: string }) => void provider.used.push(w.id),
+    },
+    resolve: async <T,>(w: T) => w,
+  };
+});
 
 const SEEN_KEY = 'drift.mobile.seen.v1';
 
@@ -11,12 +24,12 @@ async function fresh() {
   return { ...store, ...notifications };
 }
 
-const all = catalog();
+const all = generatedWallpapers();
 const creator = all[0].publisher;
 const byCreator = all.filter((w) => w.publisher === creator);
 
 /** Pretend the last check saw everything except `missing`. */
-function seenAllBut(...missing: number[]) {
+function seenAllBut(...missing: string[]) {
   native.storage.set(SEEN_KEY, JSON.stringify(all.map((w) => w.id).filter((id) => !missing.includes(id))));
 }
 
@@ -87,7 +100,9 @@ describe('new from followed creators', () => {
   it('opens the wallpaper a tapped notification names', async () => {
     const { wallpaperFromResponse } = await fresh();
     const response = (data: Record<string, unknown>) => ({ notification: { request: { content: { data } } } }) as never;
-    expect(wallpaperFromResponse(response({ wallpaperId: 7 }))).toBe(7);
+    expect(wallpaperFromResponse(response({ wallpaperId: 'coverr:abc' }))).toBe('coverr:abc');
+    // Sent before providers: the generated set's number.
+    expect(wallpaperFromResponse(response({ wallpaperId: 7 }))).toBe('drift:7');
     expect(wallpaperFromResponse(response({}))).toBeNull();
     expect(wallpaperFromResponse(null)).toBeNull();
   });

@@ -20,7 +20,7 @@ export interface Toggle {
 
 export interface SyncedList {
   name: string;
-  items: number[];
+  items: string[];
   at: number;
   deletedAt: number | null;
 }
@@ -33,14 +33,23 @@ export interface Library {
 
 /** What the apps keep in their stores. Order is meaningful there and preserved by `apply`. */
 export interface LocalLibrary {
-  favs: number[];
-  lists: Array<{ id: string; name: string; items: number[] }>;
+  /** Wallpaper ids (`coverr:…`, `drift:6`). */
+  favs: string[];
+  lists: Array<{ id: string; name: string; items: string[] }>;
   following: string[];
 }
 
 export const EMPTY_LIBRARY: Library = { favs: {}, lists: {}, following: {} };
 
-const sameItems = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+/**
+ * Libraries synced before wallpapers came from providers hold the generated set's numbers
+ * ("6", or 6 in a list); they are `drift:6` now.
+ */
+export function normalizeId(id: string | number): string {
+  return typeof id === 'number' || /^\d+$/.test(id) ? `drift:${id}` : id;
+}
+
+const sameItems = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 function stampToggles(prev: Record<string, Toggle>, local: readonly string[], now: number): Record<string, Toggle> {
   const out = { ...prev };
@@ -68,7 +77,7 @@ export function stamp(prev: Library, local: LocalLibrary, now = Date.now()): Lib
     if (p.deletedAt === null && !present.has(id)) lists[id] = { ...p, at: now, deletedAt: now };
   }
   return {
-    favs: stampToggles(prev.favs, local.favs.map(String), now),
+    favs: stampToggles(prev.favs, local.favs, now),
     lists,
     following: stampToggles(prev.following, local.following, now),
   };
@@ -107,23 +116,27 @@ export function sameLibrary(a: Library, b: Library): boolean {
  * to this device go first (newest first, as a fresh tap would), new lists and creators go last.
  */
 export function apply(local: LocalLibrary, lib: Library): LocalLibrary {
-  const favOn = (id: string) => lib.favs[id]?.on ?? false;
-  const kept = local.favs.filter((id) => favOn(String(id)));
-  const keptSet = new Set(kept.map(String));
-  const added = Object.entries(lib.favs)
+  // Two keys can land on one id ("6" and "drift:6"): the newer register wins.
+  const favs: Record<string, Toggle> = {};
+  for (const [id, t] of Object.entries(lib.favs)) favs[normalizeId(id)] = newer(favs[normalizeId(id)], t);
+  const favOn = (id: string) => favs[id]?.on ?? false;
+  const kept = local.favs.filter(favOn);
+  const keptSet = new Set(kept);
+  const added = Object.entries(favs)
     .filter(([id, t]) => t.on && !keptSet.has(id))
     .sort((x, y) => y[1].at - x[1].at)
-    .map(([id]) => Number(id));
+    .map(([id]) => id);
+  const items = (l: SyncedList) => [...new Set(l.items.map(normalizeId))];
 
   const liveList = (id: string) => (lib.lists[id] && lib.lists[id].deletedAt === null ? lib.lists[id] : null);
   const lists = local.lists
     .filter((l) => liveList(l.id))
-    .map((l) => ({ id: l.id, name: liveList(l.id)!.name, items: [...liveList(l.id)!.items] }));
+    .map((l) => ({ id: l.id, name: liveList(l.id)!.name, items: items(liveList(l.id)!) }));
   const listIds = new Set(lists.map((l) => l.id));
   const newLists = Object.entries(lib.lists)
     .filter(([id, l]) => l.deletedAt === null && !listIds.has(id))
     .sort((x, y) => x[1].at - y[1].at)
-    .map(([id, l]) => ({ id, name: l.name, items: [...l.items] }));
+    .map(([id, l]) => ({ id, name: l.name, items: items(l) }));
 
   const following = local.following.filter((p) => lib.following[p]?.on);
   const followingSet = new Set(following);

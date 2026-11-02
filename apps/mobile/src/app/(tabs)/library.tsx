@@ -1,19 +1,21 @@
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { wallpaper } from '@drift/core';
+import type { WallpaperId } from '@drift/core';
 import { color } from '@drift/tokens';
 import { TabScreen } from '../../components/TabScreen';
 import { Eyebrow, Text } from '../../components/Text';
 import { WallpaperCard } from '../../components/WallpaperCard';
+import { useKnown } from '../../lib/catalog';
 import { useApp } from '../../lib/store';
 
-function Shelf({ title, ids, empty }: { title: string; ids: number[]; empty: string }) {
+function Shelf({ title, ids, empty }: { title: string; ids: WallpaperId[]; empty: string }) {
+  const items = useKnown(ids);
   return (
     <View style={{ gap: 6 }}>
       <Eyebrow style={{ paddingHorizontal: 20 }}>{title} · {ids.length}</Eyebrow>
-      {ids.length ? (
+      {items.length ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingHorizontal: 20, paddingVertical: 8 }}>
-          {ids.map((id) => <WallpaperCard key={id} w={wallpaper(id)} width={124} height={220} />)}
+          {items.map((w) => <WallpaperCard key={w.id} w={w} width={124} height={220} />)}
         </ScrollView>
       ) : (
         <View style={{ marginHorizontal: 20, padding: 24, borderRadius: 14, borderWidth: 1, borderColor: color.divider }}>

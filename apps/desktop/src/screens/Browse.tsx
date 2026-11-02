@@ -1,19 +1,39 @@
-import { useState } from 'react';
-import { CATEGORIES, catalog, search, wallpaper, type Category } from '@drift/core';
+import { useEffect, useState } from 'react';
+import { CATEGORIES, type Category, type Wallpaper, type WallpaperId } from '@drift/core';
+import type { Feed } from '@drift/wallpapers';
 import { WallpaperCard } from '../components/WallpaperCard';
+import { useFeed, useKnown } from '../lib/catalog';
 import { useApp, type BrowseTab } from '../lib/store';
 
-function Grid({ ids }: { ids: number[] }) {
+function Grid({ items }: { items: Wallpaper[] }) {
   return (
     <div className="grid">
-      {ids.map((id) => <WallpaperCard key={id} w={wallpaper(id)} />)}
+      {items.map((w) => <WallpaperCard key={w.id} w={w} />)}
     </div>
+  );
+}
+
+/** A feed as a grid, with a button for the next page. */
+function FeedGrid({ feed, empty }: { feed: Feed; empty: string }) {
+  const { items, loading, error, more } = useFeed(feed);
+  if (!items.length) {
+    if (loading) return <div className="empty">Loading wallpapers…</div>;
+    return <div className="empty">{error ? `Couldn’t load wallpapers · ${error}` : empty}</div>;
+  }
+  return (
+    <>
+      <Grid items={items} />
+      {(more || loading) && (
+        <div className="load-more">
+          <button type="button" className="btn btn-secondary" disabled={!more} onClick={() => more?.()}>{loading ? 'Loading…' : 'Show more'}</button>
+        </div>
+      )}
+    </>
   );
 }
 
 function Discover() {
   const [cat, setCat] = useState<Category | 'All'>('All');
-  const ids = catalog().filter((w) => cat === 'All' || w.category === cat).map((w) => w.id);
   return (
     <>
       <div className="chips">
@@ -21,9 +41,14 @@ function Discover() {
           <button key={c} type="button" className="chip" aria-pressed={cat === c} onClick={() => setCat(c)}>{c}</button>
         ))}
       </div>
-      <Grid ids={ids} />
+      <FeedGrid feed={cat === 'All' ? { kind: 'trending' } : { kind: 'category', category: cat }} empty="Nothing here yet." />
     </>
   );
+}
+
+function SavedGrid({ ids, empty }: { ids: readonly WallpaperId[]; empty: string }) {
+  const items = useKnown(ids);
+  return items.length ? <Grid items={items} /> : <div className="empty">{empty}</div>;
 }
 
 function Library() {
@@ -36,7 +61,7 @@ function Library() {
       {lists.map((l) => (
         <section key={l.id} className="group">
           <span className="group-title">{l.name} · {l.items.length}</span>
-          {l.items.length ? <Grid ids={l.items} /> : <div className="empty">Nothing in {l.name} yet.</div>}
+          <SavedGrid ids={l.items} empty={`Nothing in ${l.name} yet.`} />
         </section>
       ))}
     </>
@@ -45,18 +70,30 @@ function Library() {
 
 function Favourites() {
   const favs = useApp((s) => s.favs);
-  return favs.length ? <Grid ids={favs} /> : <div className="empty">Tap the heart on any wallpaper to keep it here.</div>;
+  return <SavedGrid ids={favs} empty="Tap the heart on any wallpaper to keep it here." />;
+}
+
+/** `value`, once it has stopped changing for `ms`: one search per pause in typing, not per key. */
+function useSettled(value: string, ms = 450): string {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return value ? settled : '';
 }
 
 export function Browse({ tab }: { tab: BrowseTab }) {
-  const query = useApp((s) => s.query);
-  const results = query ? search(query) : null;
+  const typed = useApp((s) => s.query).trim();
+  const query = useSettled(typed);
   return (
     <div className="scroll">
       <div className="browse">
-        <h2>{results ? `Results for “${query}”` : tab}</h2>
-        {results ? (
-          results.length ? <Grid ids={results.map((w) => w.id)} /> : <div className="empty">No wallpapers or creators match “{query}”.</div>
+        <h2>{typed ? `Results for “${typed}”` : tab}</h2>
+        {typed && !query ? (
+          <div className="empty">Searching…</div>
+        ) : query ? (
+          <FeedGrid feed={{ kind: 'search', query }} empty={`No wallpapers match “${query}”.`} />
         ) : tab === 'Discover' ? (
           <Discover />
         ) : tab === 'Library' ? (

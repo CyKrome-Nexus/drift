@@ -1,9 +1,10 @@
-// Placeholder wallpaper art: three soft colour fields over a dark diagonal base.
+// Generated wallpaper art: three soft colour fields over a dark diagonal base. Drift's own
+// wallpapers are this art; a real wallpaper shows it, tinted by its hues, while its poster loads.
 //
 // Described as data so the desktop can paint it with CSS gradients and the phone with SVG, from
 // one source. The layer positions differ by form factor exactly as they do in the design.
 
-import type { Wallpaper } from './catalog';
+import { generatedIndex, type Wallpaper } from './catalog';
 import { oklchToHex } from './color';
 
 export type ArtForm = 'landscape' | 'portrait';
@@ -28,8 +29,8 @@ const POSITIONS: Record<ArtForm, ReadonlyArray<readonly [number, number, number,
   portrait: [[30, 22, 70, 70, 40, 96], [72, 30, 25, 74, 80, 50], [50, 40, 15, 20, 85, 88], [28, 75, 74, 30, 50, 8]],
 };
 
-export function art(w: Wallpaper, form: ArtForm): Art {
-  const p = POSITIONS[form][w.id % 4];
+export function art(w: Pick<Wallpaper, 'id' | 'hues'>, form: ArtForm): Art {
+  const p = POSITIONS[form][(w.id.startsWith('drift:') ? generatedIndex(w) : w.hues[0]) % 4];
   const [a, b, c] = w.hues;
   return {
     layers: [
@@ -42,7 +43,7 @@ export function art(w: Wallpaper, form: ArtForm): Art {
 }
 
 /** The art as a CSS `background` value. */
-export function artCss(w: Wallpaper, form: ArtForm = 'landscape'): string {
+export function artCss(w: Pick<Wallpaper, 'id' | 'hues'>, form: ArtForm = 'landscape'): string {
   const { layers, base } = art(w, form);
   const fields = layers.map(
     (l) => `radial-gradient(${l.shape} at ${l.x}% ${l.y}%, ${l.color} 0%, transparent ${l.fade}%)`,

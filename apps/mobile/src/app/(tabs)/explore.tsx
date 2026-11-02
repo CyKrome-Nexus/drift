@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MagnifyingGlass, X } from 'phosphor-react-native';
-import { CATEGORIES, catalog, search, type Category } from '@drift/core';
+import { CATEGORIES, type Category } from '@drift/core';
 import { color, font } from '@drift/tokens';
 import { TabScreen } from '../../components/TabScreen';
 import { Text } from '../../components/Text';
 import { WallpaperCard } from '../../components/WallpaperCard';
+import { useFeed } from '../../lib/catalog';
 
 const GAP = 12;
 const PAD = 20;
@@ -16,7 +17,16 @@ export default function Explore() {
   const { width } = useWindowDimensions();
   const [query, setQuery] = useState('');
   const [cat, setCat] = useState<'All' | Category>('All');
-  const items = query.trim() ? search(query) : catalog().filter((w) => cat === 'All' || w.category === cat);
+  // One search per pause in typing, not per key: free provider keys have hourly limits.
+  const [settled, setSettled] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setSettled(query.trim()), 450);
+    return () => clearTimeout(t);
+  }, [query]);
+  const searching = !!query.trim();
+  const { items, loading, error, more } = useFeed(
+    searching ? (settled ? { kind: 'search', query: settled } : null) : cat === 'All' ? { kind: 'trending' } : { kind: 'category', category: cat },
+  );
   const cardW = (width - PAD * 2 - GAP) / 2;
 
   return (
@@ -49,13 +59,25 @@ export default function Explore() {
       </View>
       <FlatList
         data={items}
-        keyExtractor={(w) => String(w.id)}
+        keyExtractor={(w) => w.id}
+        onEndReached={() => more?.()}
+        onEndReachedThreshold={0.6}
         numColumns={2}
         columnWrapperStyle={{ gap: GAP }}
         contentContainerStyle={{ padding: PAD, gap: 18, paddingBottom: 130 }}
         keyboardDismissMode="on-drag"
         renderItem={({ item }) => <WallpaperCard w={item} width={cardW} height={cardW * 1.75} />}
-        ListEmptyComponent={<Text tone={color.neutral[400]} style={{ textAlign: 'center', paddingTop: 40 }}>No wallpapers or creators match “{query}”.</Text>}
+        ListEmptyComponent={
+          <Text tone={color.neutral[400]} style={{ textAlign: 'center', paddingTop: 40 }}>
+            {loading || (searching && !settled)
+              ? 'Loading wallpapers…'
+              : error
+                ? `Couldn’t load wallpapers · ${error}`
+                : searching
+                  ? `No wallpapers match “${query.trim()}”.`
+                  : 'Nothing here yet.'}
+          </Text>
+        }
       />
     </TabScreen>
   );

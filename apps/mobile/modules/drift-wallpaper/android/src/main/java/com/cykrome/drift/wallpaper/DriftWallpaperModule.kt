@@ -8,6 +8,7 @@ import android.content.Intent
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import org.json.JSONObject
 
 class DriftWallpaperModule : Module() {
   private val context: Context
@@ -22,12 +23,19 @@ class DriftWallpaperModule : Module() {
     Function("isActive") { isActive() }
 
     /**
-     * Stores [spec] for the wallpaper service. If Drift is already the live wallpaper it switches
-     * immediately ("applied"); otherwise the system preview opens and the user confirms ("picker").
-     * Apps cannot set a live wallpaper themselves, and the home/lock choice is made there.
+     * Stores [spec] for the wallpaper service, after downloading its video if it has one. If Drift
+     * is already the live wallpaper it switches immediately ("applied"); otherwise the system
+     * preview opens and the user confirms ("picker"). Apps cannot set a live wallpaper
+     * themselves, and the home/lock choice is made there.
      */
     AsyncFunction("setLiveWallpaper") { spec: String ->
-      WallpaperStore.save(context, spec)
+      val json = JSONObject(spec)
+      val video = WallpaperSpec.parse(spec).video
+      // Runs on Expo's module queue, not the main thread, so the download may block here.
+      val file = video?.let { VideoCache.fetch(context, it) }
+      if (file != null) json.put("videoFile", file.absolutePath)
+      WallpaperStore.save(context, json.toString())
+      VideoCache.prune(context, file)
       if (isActive()) {
         "applied"
       } else {

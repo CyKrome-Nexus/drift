@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, Share, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, Share, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,12 +21,13 @@ import {
   Star,
   Trophy,
 } from 'phosphor-react-native';
-import { catalog, wallpaper, type MobileSettings } from '@drift/core';
+import type { MobileSettings, Wallpaper, WallpaperId } from '@drift/core';
 import { alpha, color } from '@drift/tokens';
 import { Art } from '../../components/Art';
 import { BlurTarget, Glass, GlassTarget, useBlurTargetRef } from '../../components/Glass';
 import { Text } from '../../components/Text';
 import { requirePro } from '../../lib/account';
+import { useWallpaper } from '../../lib/catalog';
 import { setState, toast, toggleFav, toggleFollow, updateSettings, useApp } from '../../lib/store';
 import { applyWallpaper, downloadWallpaper } from '../../lib/wallpaper';
 
@@ -40,7 +41,7 @@ function RoundGlass({ label, onPress, children }: { label: string; onPress?: () 
   );
 }
 
-function ListPicker({ id }: { id: number }) {
+function ListPicker({ id }: { id: WallpaperId }) {
   const lists = useApp((s) => s.lists);
   const toggle = (listId: string) =>
     setState((s) => ({ lists: s.lists.map((l) => (l.id !== listId ? l : { ...l, items: l.items.includes(id) ? l.items.filter((x) => x !== id) : [id, ...l.items] })) }));
@@ -70,9 +71,32 @@ function ListPicker({ id }: { id: number }) {
   );
 }
 
+/** Route params arrive decoded; an id that still looks encoded is decoded once more. */
+export function routeId(raw: string | string[] | undefined): WallpaperId | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (!value) return null;
+  try {
+    return /%[0-9A-Fa-f]{2}/.test(value) ? decodeURIComponent(value) : value;
+  } catch {
+    return value;
+  }
+}
+
 export default function WallpaperScreen() {
   const { id: raw } = useLocalSearchParams<{ id: string }>();
-  const id = Number(raw);
+  const w = useWallpaper(routeId(raw));
+  if (!w) {
+    return (
+      <View style={{ flex: 1, backgroundColor: color.bg, alignItems: 'center', justifyContent: 'center' }}>
+        {w === undefined ? <ActivityIndicator color={color.accent} /> : <Text>This wallpaper is no longer available.</Text>}
+      </View>
+    );
+  }
+  return <WallpaperView key={w.id} w={w} />;
+}
+
+function WallpaperView({ w }: { w: Wallpaper }) {
+  const id = w.id;
   const insets = useSafeAreaInsets();
   const fav = useApp((s) => s.favs.includes(id));
   const target = useApp((s) => s.settings.applyTarget);
@@ -83,11 +107,6 @@ export default function WallpaperScreen() {
   const [paused, setPaused] = useState(false);
   const [listsOpen, setListsOpen] = useState(false);
   const backdrop = useBlurTargetRef();
-
-  if (!Number.isInteger(id) || !catalog()[id]) {
-    return <View style={{ flex: 1, backgroundColor: color.bg, alignItems: 'center', justifyContent: 'center' }}><Text>Wallpaper not found.</Text></View>;
-  }
-  const w = wallpaper(id);
   const locked = w.tier === 'pro' && !isPro;
   const followed = following.includes(w.publisher);
 
@@ -95,7 +114,11 @@ export default function WallpaperScreen() {
     { label: fav ? 'Favourited' : 'Favourite', icon: <Heart size={21} weight={fav ? 'fill' : 'regular'} color={color.accent} />, onPress: () => toggleFav(id) },
     { label: 'Add to list', icon: <ListPlus size={21} color={color.accent} />, onPress: () => setListsOpen((o) => !o) },
     { label: 'Download', icon: <DownloadSimple size={21} color={color.accent} />, onPress: () => downloadWallpaper(w) },
-    { label: 'Share', icon: <ShareNetwork size={21} color={color.accent} />, onPress: () => void Share.share({ message: `${w.name} by ${w.publisher} — a live wallpaper on Drift` }) },
+    {
+      label: 'Share',
+      icon: <ShareNetwork size={21} color={color.accent} />,
+      onPress: () => void Share.share({ message: [`${w.name} by ${w.publisher} — a live wallpaper on Drift`, w.credit.sourceUrl].filter(Boolean).join('\n') }),
+    },
   ];
 
   return (
@@ -118,15 +141,17 @@ export default function WallpaperScreen() {
       <Glass radius={32} style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) + 14 }]}>
         <View style={styles.grabber} />
         <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-          {w.rank <= 10 && (
+          {w.rank !== undefined && w.rank <= 10 && (
             <View style={[styles.tag, { borderWidth: 1, borderColor: color.accent }]}>
               <Trophy size={11} weight="fill" color={color.accent} /><Text size={11} tone={color.accent}>#{w.rank} Trending</Text>
             </View>
           )}
           <View style={[styles.tag, { backgroundColor: color.neutral[800] }]}><Text size={11} tone={color.neutral[100]}>{w.category}</Text></View>
-          <View style={[styles.tag, { backgroundColor: color.neutral[800] }]}>
-            <Star size={11} weight="fill" color={color.accent} /><Text size={11} tone={color.neutral[100]}>{w.rating}</Text>
-          </View>
+          {w.stats && (
+            <View style={[styles.tag, { backgroundColor: color.neutral[800] }]}>
+              <Star size={11} weight="fill" color={color.accent} /><Text size={11} tone={color.neutral[100]}>{w.stats.rating}</Text>
+            </View>
+          )}
           {w.tier === 'pro' && (
             <View style={[styles.tag, { backgroundColor: color.accentRamp[800] }]}>
               <CrownSimple size={11} weight="fill" color={color.accentRamp[100]} /><Text size={11} tone={color.accentRamp[100]}>Pro</Text>
@@ -138,16 +163,26 @@ export default function WallpaperScreen() {
           <View style={styles.pubAvatar}><Text size={12} weight="semibold" tone={color.accentRamp[200]}>{w.initials}</Text></View>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text size={14}>{w.publisher}</Text><SealCheck size={14} weight="fill" color={color.accent} />
+              <Text size={14}>{w.publisher}</Text>{!w.media && <SealCheck size={14} weight="fill" color={color.accent} />}
             </View>
-            <Text size={11} tone={color.neutral[400]}>{w.phoneRes} · {w.fps} fps · {w.phoneSizeMb} MB</Text>
+            {w.stats ? (
+              <Text size={11} tone={color.neutral[400]}>{w.stats.phoneRes} · {w.fps} fps · {w.stats.phoneSizeMb} MB</Text>
+            ) : (
+              // Credit, as the provider's terms ask.
+              <Text size={11} tone={color.neutral[400]} onPress={() => void Linking.openURL(w.credit.sourceUrl ?? w.credit.providerUrl)}>
+                {[w.res, w.loop && `${w.loop} loop`].filter(Boolean).join(' · ')} · {w.media?.kind === 'video' ? 'Video' : 'Image'}
+                {w.credit.author ? ` by ${w.credit.author}` : ''} on <Text size={11} tone={color.neutral[200]} style={{ textDecorationLine: 'underline' }}>{w.credit.provider}</Text>
+              </Text>
+            )}
           </View>
-          <Pressable accessibilityRole="button" accessibilityState={{ selected: followed }} onPress={() => {
-            toggleFollow(w.publisher);
-            if (!followed) toast(notify ? `Following ${w.publisher}` : `Following ${w.publisher} · turn on notifications in Settings to hear about new wallpapers`, notify ? 'ok' : 'info');
-          }}>
-            <Glass accent={followed} radius={8} style={{ height: 36, paddingHorizontal: 14, justifyContent: 'center' }}><Text size={13}>{followed ? 'Following' : 'Follow'}</Text></Glass>
-          </Pressable>
+          {!w.media && (
+            <Pressable accessibilityRole="button" accessibilityState={{ selected: followed }} onPress={() => {
+              toggleFollow(w.publisher);
+              if (!followed) toast(notify ? `Following ${w.publisher}` : `Following ${w.publisher} · turn on notifications in Settings to hear about new wallpapers`, notify ? 'ok' : 'info');
+            }}>
+              <Glass accent={followed} radius={8} style={{ height: 36, paddingHorizontal: 14, justifyContent: 'center' }}><Text size={13}>{followed ? 'Following' : 'Follow'}</Text></Glass>
+            </Pressable>
+          )}
         </View>
 
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>

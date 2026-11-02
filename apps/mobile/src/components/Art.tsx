@@ -1,12 +1,14 @@
-// A wallpaper's art in SVG, drawn from the same layer data the desktop paints with CSS.
+// A wallpaper: a provider's video (or its still), or Drift's generated art in SVG, drawn from the
+// same layer data the desktop paints with CSS.
 //
 // The desktop drifts an oversized background; here the oversized SVG itself drifts on the native
 // driver, which keeps the JS thread idle while a loop plays.
 
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { Animated, Easing, Image, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
-import { art, type Wallpaper } from '@drift/core';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { art, pickFile, type Wallpaper } from '@drift/core';
 import { DRIFT_MS, OVERSCAN_X, OVERSCAN_Y } from '../lib/motion';
 
 function ArtSvg({ w, width, height }: { w: Wallpaper; width: number; height: number }) {
@@ -14,7 +16,8 @@ function ArtSvg({ w, width, height }: { w: Wallpaper; width: number; height: num
   const rad = (base.angle * Math.PI) / 180;
   const dx = Math.sin(rad) / 2;
   const dy = -Math.cos(rad) / 2;
-  const id = `w${w.id}`;
+  // SVG ids allow neither ':' nor spaces.
+  const id = `w${w.id.replace(/[^A-Za-z0-9_-]/g, '_')}`;
   return (
     <Svg width={width} height={height}>
       <Defs>
@@ -51,7 +54,48 @@ function ArtSvg({ w, width, height }: { w: Wallpaper; width: number; height: num
   );
 }
 
+/**
+ * A provider's wallpaper. Moving, it plays the provider's short preview clip (light on mobile
+ * data) or failing that a file of at most 1080 lines, muted and looped; still, its thumbnail.
+ * The generated art's tint shows behind it while it loads.
+ */
+function MediaArt({ w, still, paused, radius }: { w: Wallpaper; still: boolean; paused: boolean; radius: number }) {
+  const media = w.media!;
+  const [tint, setTint] = useState({ width: 0, height: 0 });
+  const source = still ? null : (media.preview ?? pickFile(media.files, 1080)?.url ?? null);
+  const player = useVideoPlayer(source, (p) => {
+    p.loop = true;
+    p.muted = true;
+  });
+
+  useEffect(() => {
+    if (!source) return;
+    if (paused) player.pause();
+    else player.play();
+  }, [player, paused, source]);
+
+  return (
+    <View
+      style={[StyleSheet.absoluteFill, { overflow: 'hidden', borderRadius: radius }]}
+      pointerEvents="none"
+      onLayout={(e) => setTint({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+    >
+      {tint.width > 0 && <ArtSvg w={w} width={tint.width} height={tint.height} />}
+      {source ? (
+        <VideoView player={player} style={StyleSheet.absoluteFill} contentFit="cover" nativeControls={false} />
+      ) : (
+        <Image source={{ uri: still ? media.thumbnail : media.poster }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+      )}
+    </View>
+  );
+}
+
 export function Art({ w, still = false, paused = false, radius = 0 }: { w: Wallpaper; still?: boolean; paused?: boolean; radius?: number }) {
+  if (w.media) return <MediaArt w={w} still={still} paused={paused} radius={radius} />;
+  return <GeneratedArt w={w} still={still} paused={paused} radius={radius} />;
+}
+
+function GeneratedArt({ w, still, paused, radius }: { w: Wallpaper; still: boolean; paused: boolean; radius: number }) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const t = useRef(new Animated.Value(0)).current;
   const fade = useRef(new Animated.Value(still ? 1 : 0)).current;
