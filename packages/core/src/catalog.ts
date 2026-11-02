@@ -1,10 +1,10 @@
 // The wallpaper shape every screen reads, and Drift's own generated wallpapers.
 //
-// Wallpapers come from providers (@drift/wallpapers): stock-video APIs such as Coverr and NASA,
+// Wallpapers come from providers (@drift/wallpapers): stock-video APIs such as Pexels and Pixabay,
 // and the 24 generated gradient loops below, which need no network. Each provider maps its
 // API onto this one shape, so no screen knows where a wallpaper came from.
 //
-// Ids are `<provider>:<provider's own id>` (`coverr:S1YbPl1NfI`, `nasa:PIA12345`, `drift:6`).
+// Ids are `<provider>:<provider's own id>` (`pexels:2499611`, `pixabay:125`, `drift:6`).
 
 export type Category = 'Ambient' | 'Cosmos' | 'Abstract' | 'Nature';
 export type Tier = 'free' | 'pro';

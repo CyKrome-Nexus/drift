@@ -1,10 +1,11 @@
 // Which providers are on, from the build's environment — the way the CDS backend picks its
 // storage and payment providers. Swapping or adding a provider is an env change:
 //
-//   WALLPAPER_PROVIDERS   Comma-separated, in priority order. Default: coverr,nasa,drift
-//   COVERR_API_KEY        Coverr's key. Free (Demo) or paid (Production): same key, same API.
+//   WALLPAPER_PROVIDERS   Comma-separated, in priority order. Default: pexels,pixabay,drift
+//   PEXELS_API_KEY        Pexels' key (free: 200 requests an hour).
+//   PIXABAY_API_KEY       Pixabay's key (free: 100 requests a minute).
+//   COVERR_API_KEY        Coverr's key, for `coverr`. Free (Demo) or paid (Production).
 //   COVERR_API_URL        Optional; Coverr's own API unless testing.
-//   NASA_ASSETS_URL       Optional; NASA's own asset host unless testing.
 //
 // Each app reads these with its bundler's prefix (VITE_ on the desktop, EXPO_PUBLIC_ on the
 // phone). A provider listed without what it needs is skipped and reported (`skipped`), never
@@ -17,24 +18,37 @@
 
 import { coverrProvider, type CoverrConfig } from './providers/coverr';
 import { driftProvider } from './providers/drift';
-import { nasaProvider, type NasaConfig } from './providers/nasa';
+import { pexelsProvider, type PexelsConfig } from './providers/pexels';
+import { pixabayProvider, type PixabayConfig } from './providers/pixabay';
+import { failover } from './failover';
 import type { ProviderContext, WallpaperProvider } from './types';
 
-export const DEFAULT_PROVIDERS: readonly string[] = ['coverr', 'nasa', 'drift'];
+export const DEFAULT_PROVIDERS: readonly string[] = ['pexels', 'pixabay', 'drift'];
+
+/** A keyed provider's config, with any further keys to fall over to (see failover.ts). */
+type Keyed<C extends { apiKey: string }> = C & { apiKeys?: string[] };
 
 export interface WallpaperConfig {
   /** Provider names in priority order. */
   providers: string[];
-  coverr?: CoverrConfig;
-  nasa?: NasaConfig;
+  pexels?: Keyed<PexelsConfig>;
+  pixabay?: Keyed<PixabayConfig>;
+  coverr?: Keyed<CoverrConfig>;
+}
+
+/** One provider per key, the first key first, behind one failover provider. */
+function perKey<C extends { apiKey: string }>(config: Keyed<C>, make: (c: C) => WallpaperProvider): WallpaperProvider {
+  const keys = [...new Set([config.apiKey, ...(config.apiKeys ?? [])].map((k) => k.trim()).filter(Boolean))];
+  return failover(keys.map((apiKey) => make({ ...config, apiKey })));
 }
 
 type Factory = (config: WallpaperConfig, ctx: ProviderContext) => WallpaperProvider | { missing: string };
 
 /** Every provider Drift knows. A new one is an adapter in providers/ and a line here. */
 export const PROVIDER_FACTORIES: Record<string, Factory> = {
-  coverr: (c, ctx) => (c.coverr?.apiKey ? coverrProvider(c.coverr, ctx) : { missing: 'COVERR_API_KEY' }),
-  nasa: (c, ctx) => nasaProvider(c.nasa ?? {}, ctx),
+  pexels: (c, ctx) => (c.pexels?.apiKey ? perKey(c.pexels, (k) => pexelsProvider(k, ctx)) : { missing: 'PEXELS_API_KEY' }),
+  pixabay: (c, ctx) => (c.pixabay?.apiKey ? perKey(c.pixabay, (k) => pixabayProvider(k, ctx)) : { missing: 'PIXABAY_API_KEY' }),
+  coverr: (c, ctx) => (c.coverr?.apiKey ? perKey(c.coverr, (k) => coverrProvider(k, ctx)) : { missing: 'COVERR_API_KEY' }),
   drift: () => driftProvider(),
 };
 
@@ -47,10 +61,13 @@ export function configFromEnv(env: Record<string, string | undefined>, prefix = 
   const list = read('WALLPAPER_PROVIDERS');
   const providers = list ? list.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean) : [...DEFAULT_PROVIDERS];
   const coverrKey = read('COVERR_API_KEY');
+  const pexelsKey = read('PEXELS_API_KEY');
+  const pixabayKey = read('PIXABAY_API_KEY');
   return {
     providers: [...new Set(providers)],
+    pexels: pexelsKey ? { apiKey: pexelsKey } : undefined,
+    pixabay: pixabayKey ? { apiKey: pixabayKey } : undefined,
     coverr: coverrKey ? { apiKey: coverrKey, baseUrl: read('COVERR_API_URL') } : undefined,
-    nasa: { assetsUrl: read('NASA_ASSETS_URL') },
   };
 }
 

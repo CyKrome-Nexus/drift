@@ -27,7 +27,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://storage.coverr.co https://images-assets.nasa.gov; media-src 'self' blob: https://storage.coverr.co https://images-assets.nasa.gov; font-src 'self' data:; connect-src ipc: http://ipc.localhost https://api.cykrome.com https://*.cykrome.com http://localhost:* https://api.coverr.co https://images-assets.nasa.gov"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://videos.pexels.com https://images.pexels.com https://cdn.pixabay.com https://i.vimeocdn.com https://player.vimeo.com https://*.akamaized.net https://storage.coverr.co; media-src 'self' blob: https://videos.pexels.com https://images.pexels.com https://cdn.pixabay.com https://i.vimeocdn.com https://player.vimeo.com https://*.akamaized.net https://storage.coverr.co; font-src 'self' data:; connect-src ipc: http://ipc.localhost https://api.cykrome.com https://*.cykrome.com http://localhost:* https://api.pexels.com https://pixabay.com https://api.coverr.co"
     }
   },
   "plugins": {

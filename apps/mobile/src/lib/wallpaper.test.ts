@@ -25,20 +25,20 @@ async function fresh() {
 
 const free = generatedWallpapers().find((w) => w.tier === 'free')!;
 const pro = generatedWallpapers().find((w) => w.tier === 'pro')!;
-/** A provider's wallpaper: NASA-style files, smallest first, sizes known only for the original. */
+/** A provider's wallpaper: files smallest first, sizes known only for the original. */
 const video: Wallpaper = {
   ...free,
-  id: 'nasa:EarthAtNight',
+  id: 'pixabay:EarthAtNight',
   name: 'Earth at Night',
   media: {
     kind: 'video',
-    poster: 'https://images-assets.nasa.gov/p.jpg',
-    thumbnail: 'https://images-assets.nasa.gov/t.jpg',
-    preview: 'https://images-assets.nasa.gov/preview.mp4',
+    poster: 'https://cdn.pixabay.com/p.jpg',
+    thumbnail: 'https://cdn.pixabay.com/t.jpg',
+    preview: 'https://cdn.pixabay.com/preview.mp4',
     files: [
-      { url: 'https://images-assets.nasa.gov/mobile.mp4', width: 0, height: 0, type: 'video/mp4' },
-      { url: 'https://images-assets.nasa.gov/large.mp4', width: 0, height: 0, type: 'video/mp4' },
-      { url: 'https://images-assets.nasa.gov/orig.mp4', width: 3840, height: 2160, type: 'video/mp4' },
+      { url: 'https://cdn.pixabay.com/mobile.mp4', width: 0, height: 0, type: 'video/mp4' },
+      { url: 'https://cdn.pixabay.com/large.mp4', width: 0, height: 0, type: 'video/mp4' },
+      { url: 'https://cdn.pixabay.com/orig.mp4', width: 3840, height: 2160, type: 'video/mp4' },
     ],
     durationMs: 83_000,
   },
@@ -60,8 +60,8 @@ describe('the spec the native wallpapers draw', () => {
 describe('a provider’s video on the phone', () => {
   it('sends Android a light file to loop all day, and iOS the sharpest for its Live Photo', async () => {
     const { phoneFile, nativeSpec } = await fresh();
-    expect(phoneFile(video, 'android')).toBe('https://images-assets.nasa.gov/large.mp4');
-    expect(phoneFile(video, 'ios')).toBe('https://images-assets.nasa.gov/orig.mp4');
+    expect(phoneFile(video, 'android')).toBe('https://cdn.pixabay.com/large.mp4');
+    expect(phoneFile(video, 'ios')).toBe('https://cdn.pixabay.com/orig.mp4');
     expect(phoneFile(free, 'ios')).toBeNull();
     expect(nativeSpec(video, DEFAULT_MOBILE_SETTINGS)).toMatchObject({ id: video.id, poster: video.media!.poster });
   });
@@ -72,14 +72,14 @@ describe('a provider’s video on the phone', () => {
     provider.used = [];
     const { applyWallpaper } = await fresh();
     await applyWallpaper(video);
-    expect(JSON.parse(native.wallpaper.specs[0]).video).toBe('https://images-assets.nasa.gov/large.mp4');
+    expect(JSON.parse(native.wallpaper.specs[0]).video).toBe('https://cdn.pixabay.com/large.mp4');
     expect(provider.used).toEqual([video.id]);
   });
 
   it('downloads by opening the file, and generated art has none', async () => {
     const { downloadWallpaper, getState } = await fresh();
     await downloadWallpaper(video);
-    expect(native.openedUrls).toEqual(['https://images-assets.nasa.gov/orig.mp4']);
+    expect(native.openedUrls).toEqual(['https://cdn.pixabay.com/orig.mp4']);
     await downloadWallpaper(free);
     expect(native.openedUrls).toHaveLength(1);
     expect(getState().toast?.text).toContain('no file to save');

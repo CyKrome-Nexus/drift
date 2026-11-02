@@ -142,6 +142,6 @@ describe('libraries synced before providers', () => {
     expect(out.favs).toEqual(['drift:14']);
     expect(out.lists).toEqual([{ id: 'l', name: 'L', items: ['drift:6', 'coverr:a'] }]);
     expect(normalizeId(6)).toBe('drift:6');
-    expect(normalizeId('nasa:FD 17')).toBe('nasa:FD 17');
+    expect(normalizeId('pexels:2499611')).toBe('pexels:2499611');
   });
 });

@@ -2,7 +2,7 @@
 //
 // - Pages interleave the providers in priority order and drop repeats.
 // - Fallback providers (Drift's generated set) appear only where no other provider has anything
-//   for that feed: with Coverr and NASA on, Drift shows their wallpapers; offline, or for a
+//   for that feed: with Pexels and Pixabay on, Drift shows their wallpapers; offline, or for a
 //   category no provider covers, it shows its own.
 // - A provider that fails is reported (`onError`) and treated as empty, so one outage or a spent
 //   rate limit never blanks the screen.
@@ -14,6 +14,8 @@ import type { Feed, FeedPage, Fetch, WallpaperProvider } from './types';
 
 export interface CatalogOptions {
   fetch?: Fetch;
+  /** The shape the app shows: landscape on the desktop (default), portrait on the phone. */
+  orientation?: 'landscape' | 'portrait';
   /** Wallpapers per provider per page. */
   pageSize?: number;
   ttlMs?: number;
@@ -73,7 +75,7 @@ export function createCatalog(config: WallpaperConfig, options: CatalogOptions =
   const ttlMs = options.ttlMs ?? 30 * 60_000;
   const now = options.now ?? Date.now;
   const report = options.onError ?? (() => {});
-  const { providers, skipped } = resolveProviders(config, { fetch: fetchImpl });
+  const { providers, skipped } = resolveProviders(config, { fetch: fetchImpl, orientation: options.orientation ?? 'landscape' });
   const primary = providers.filter((p) => !FALLBACK_PROVIDERS.has(p.name));
   const fallback = providers.filter((p) => FALLBACK_PROVIDERS.has(p.name));
   const byName = new Map(providers.map((p) => [p.name, p]));

@@ -17,6 +17,7 @@ import {
   SpeakerSlash,
   UserCircle,
   WifiHigh,
+  FilmStrip,
 } from 'phosphor-react-native';
 import { displayName, initials, planLine } from '@drift/account';
 import { isProOption, type MobileSettings } from '@drift/core';
@@ -25,6 +26,7 @@ import { Group, Row, Toggle } from '../../components/controls';
 import { TabScreen } from '../../components/TabScreen';
 import { Text } from '../../components/Text';
 import { requirePro } from '../../lib/account';
+import { useConnections } from '../../lib/catalog';
 import { checkFollowedCreators, enableNotifications } from '../../lib/notifications';
 import { setState, toast, updateSettings, useApp } from '../../lib/store';
 
@@ -105,6 +107,8 @@ function ProfileCard() {
 export default function Settings() {
   const insets = useSafeAreaInsets();
   const plan = useApp((s) => s.account.plan.plan);
+  const connected = useConnections().filter((c) => c.connected).length;
+  const sources = connected ? `${connected} connected` : 'Add keys';
   return (
     <TabScreen route="settings" style={{ backgroundColor: color.bg }}>
       <LinearGradient colors={[color.surface, color.bg]} locations={[0, 0.4]} start={{ x: 0, y: 0 }} end={{ x: 0.3, y: 1 }} style={StyleSheet.absoluteFill} />
@@ -120,6 +124,10 @@ export default function Settings() {
         </Group>
 
         {Platform.OS === 'ios' && <ShortcutRows />}
+
+        <Group title="Wallpaper sources">
+          <Row first icon={ic(FilmStrip)} label="Your provider keys" value={sources} onPress={() => router.push('/sources')} />
+        </Group>
 
         <Group title="Downloads">
           <SettingToggle first k="wifiOnly" label="Wi-Fi only" icon={ic(WifiHigh)} />

@@ -6,7 +6,7 @@ import { Art } from './Art';
 const w = generatedWallpapers()[0];
 const video: Wallpaper = {
   ...w,
-  id: 'nasa:x',
+  id: 'pexels:x',
   media: { kind: 'video', poster: 'https://p/poster.jpg', thumbnail: 'https://p/thumb.jpg', preview: 'https://p/preview.mp4', files: [{ url: 'https://p/large.mp4', width: 1920, height: 1080, type: 'video/mp4' }], durationMs: 30_000 },
 };
 
