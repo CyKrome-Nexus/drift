@@ -1,28 +1,129 @@
-// The wallpaper catalog for the phone: the providers the build's env switches on (see
-// @drift/wallpapers config.ts — EXPO_PUBLIC_WALLPAPER_PROVIDERS, EXPO_PUBLIC_PEXELS_API_KEY, …),
-// plus hooks that keep what they return in the store's `known` cache. Same as the desktop's,
-// against the phone's store.
+// The wallpaper catalog for the phone, plus hooks that keep what it returns in the store's
+// `known` cache. Same as the desktop's, against the phone's store.
+//
+// Providers run on the user's own keys (the welcome screen, Settings › Wallpaper sources), kept
+// in Secure Store; see @drift/wallpapers keys.ts. A build may still set keys in .env
+// (EXPO_PUBLIC_PEXELS_API_KEY, …) for development; the user's win. Saving or removing a key
+// rebuilds the providers behind `catalog`, and every feed on screen reloads.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import type { Wallpaper, WallpaperId } from '@drift/core';
-import { configFromEnv, createCatalog, feedKey, type Feed } from '@drift/wallpapers';
+import {
+  KEY_PROVIDERS,
+  cleanKeys,
+  configFromEnv,
+  createCatalog,
+  feedKey,
+  withKeys,
+  type Catalog,
+  type Feed,
+  type KeyedProvider,
+  type ProviderKeys,
+} from '@drift/wallpapers';
 import { getState, remember, useApp } from './store';
 
 // Expo inlines EXPO_PUBLIC_ variables only where each is read by name.
-const env = {
-  EXPO_PUBLIC_WALLPAPER_PROVIDERS: process.env.EXPO_PUBLIC_WALLPAPER_PROVIDERS,
-  EXPO_PUBLIC_PEXELS_API_KEY: process.env.EXPO_PUBLIC_PEXELS_API_KEY,
-  EXPO_PUBLIC_PIXABAY_API_KEY: process.env.EXPO_PUBLIC_PIXABAY_API_KEY,
-  EXPO_PUBLIC_COVERR_API_KEY: process.env.EXPO_PUBLIC_COVERR_API_KEY,
+const BUILD = configFromEnv(
+  {
+    EXPO_PUBLIC_WALLPAPER_PROVIDERS: process.env.EXPO_PUBLIC_WALLPAPER_PROVIDERS,
+    EXPO_PUBLIC_PEXELS_API_KEY: process.env.EXPO_PUBLIC_PEXELS_API_KEY,
+    EXPO_PUBLIC_PIXABAY_API_KEY: process.env.EXPO_PUBLIC_PIXABAY_API_KEY,
+    EXPO_PUBLIC_COVERR_API_KEY: process.env.EXPO_PUBLIC_COVERR_API_KEY,
+  },
+  'EXPO_PUBLIC_',
+);
+
+function build(keys: ProviderKeys): Catalog {
+  return createCatalog(withKeys(BUILD, keys), {
+    // Phone screens are tall: providers that can, return portrait loops.
+    orientation: 'portrait',
+    onError: (provider, error) => console.warn(`[catalog] ${provider}:`, error instanceof Error ? error.message : error),
+  });
+}
+
+let current = build({});
+let keys: ProviderKeys = {};
+let version = 0;
+const listeners = new Set<() => void>();
+
+function rebuild(next: ProviderKeys): void {
+  keys = cleanKeys(next);
+  current = build(keys);
+  version++;
+  listeners.forEach((l) => l());
+}
+
+/** The catalog. Stable to hold on to: it always answers from the current providers. */
+export const catalog: Catalog = {
+  get providers() {
+    return current.providers;
+  },
+  get skipped() {
+    return current.skipped;
+  },
+  feed: (feed, page) => current.feed(feed, page),
+  get: (id) => current.get(id),
+  used: (w) => current.used(w),
 };
 
-export const catalog = createCatalog(configFromEnv(env, 'EXPO_PUBLIC_'), {
-  // Phone screens are tall: providers that can, return portrait loops.
-  orientation: 'portrait',
-  onError: (provider, error) => console.warn(`[catalog] ${provider}:`, error instanceof Error ? error.message : error),
-});
+/** Changes whenever the providers are rebuilt; feeds reload on it. */
+export function useCatalogVersion(): number {
+  return useSyncExternalStore(
+    (l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+    () => version,
+  );
+}
 
-for (const { name, reason } of catalog.skipped) console.warn(`[catalog] ${name} is off: ${reason}`);
+// ---- the user's own keys ----------------------------------------------------------------------
+
+const secureKey = (p: KeyedProvider) => `drift.key.${p}`;
+const SOURCES_KEY = 'drift.mobile.sources.v1';
+
+/** Read the saved keys and switch their providers on. Call once at startup. */
+export async function loadKeys(): Promise<void> {
+  const saved: ProviderKeys = {};
+  for (const { name } of KEY_PROVIDERS) {
+    try {
+      const k = await SecureStore.getItemAsync(secureKey(name));
+      if (k) saved[name] = k;
+    } catch (err) {
+      console.warn(`[catalog] could not read the ${name} key`, err);
+    }
+  }
+  if (Object.keys(saved).length) rebuild(saved);
+}
+
+/** Save (or with null, remove) the user's key for `provider`, and use it at once. */
+export async function setKey(provider: KeyedProvider, key: string | null): Promise<void> {
+  const k = key?.trim() || null;
+  if (k) await SecureStore.setItemAsync(secureKey(provider), k);
+  else await SecureStore.deleteItemAsync(secureKey(provider));
+  rebuild({ ...keys, [provider]: k ?? undefined });
+}
+
+/** Which providers the user has a key saved for. */
+export function useKeys(): Record<KeyedProvider, boolean> {
+  useCatalogVersion();
+  return Object.fromEntries(KEY_PROVIDERS.map((p) => [p.name, !!keys[p.name]])) as Record<KeyedProvider, boolean>;
+}
+
+/** Whether the welcome screen has been answered (keys added, or skipped). */
+export async function onboarded(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(SOURCES_KEY)) === 'done';
+  } catch {
+    return true;
+  }
+}
+
+export function finishOnboarding(): void {
+  AsyncStorage.setItem(SOURCES_KEY, 'done').catch(() => {});
+}
 
 export interface FeedState {
   items: Wallpaper[];
@@ -34,7 +135,9 @@ export interface FeedState {
 
 /** A feed, page by page. Changing the feed starts over. */
 export function useFeed(feed: Feed | null): FeedState {
-  const key = feed ? feedKey(feed) : '';
+  // New providers (a key added or removed) are a new feed.
+  const providers = useCatalogVersion();
+  const key = feed ? `${feedKey(feed)}@${providers}` : '';
   const [state, setState] = useState<{ key: string; items: Wallpaper[]; next: number | null; loading: boolean; error: string | null }>({
     key,
     items: [],
@@ -48,7 +151,7 @@ export function useFeed(feed: Feed | null): FeedState {
   const load = useCallback((page: number, reset: boolean) => {
     const f = feedRef.current;
     if (!f) return;
-    const k = feedKey(f);
+    const k = `${feedKey(f)}@${version}`;
     setState((s) => ({ ...(reset ? { key: k, items: [], next: page } : s), loading: true, error: null }));
     catalog.feed(f, page).then(
       (p) => {

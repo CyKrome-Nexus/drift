@@ -19,13 +19,23 @@ Ids are `<provider>:<provider's id>`: `coverr:S1YbPl1NfI`, `nasa:GSFC_20170412_L
 `drift:6`. Favourites, lists and history saved before providers (plain numbers) are read as
 `drift:<n>`, on both apps and in synced libraries.
 
+## Your own keys
+
+Drift ships with no Pexels or Pixabay keys. On first launch a welcome screen asks each person to
+connect their own free keys (with a link to each provider's key page and the steps), checks each
+key with one request, and keeps it in the OS credential store on desktop (Keychain, Credential
+Manager, Secret Service: `src-tauri/src/secrets.rs`) or Secure Store on the phone. Every request is
+then that person's own, under their own account and free quota: personal use. "Skip for now"
+browses Drift's generated loops; Settings › Wallpaper sources adds, checks or removes keys at any
+time, and the catalog switches over without a restart (`packages/wallpapers/src/keys.ts`).
+
 ## Choosing providers (env, like the backend's providers)
 
 ```sh
 # Desktop: apps/desktop/.env       Phone: apps/mobile/.env (EXPO_PUBLIC_ prefix)
 VITE_WALLPAPER_PROVIDERS=pexels,pixabay,drift   # priority order; this is the default
-VITE_PEXELS_API_KEY=…     # https://www.pexels.com/api/new/
-VITE_PIXABAY_API_KEY=…    # https://pixabay.com/api/docs/ (shown when signed in)
+VITE_PEXELS_API_KEY=…     # development only: the user's own key, once saved, wins
+VITE_PIXABAY_API_KEY=…
 ```
 
 A provider listed without its key is skipped with a console warning, never fatal; `drift` is
@@ -37,8 +47,8 @@ lists Drift keeps the portrait videos when there are enough), the desktop's for 
 
 ## Licensing: personal use
 
-Drift is a personal project, and Pexels and Pixabay are used as personal-use sources. Before Drift
-is distributed to others, revisit them: Pexels' API terms forbid "making Pexels content available
+Drift is a personal project, and Pexels and Pixabay are used as personal-use sources, each person
+on their own key. Before Drift is distributed to others, still revisit them: Pexels' API terms forbid "making Pexels content available
 as a wallpaper app", Unsplash's forbid wallpaper applications, and Pixabay's licence forbids
 distributing content on a standalone basis. Coverr (commercial use allowed) and NASA (public
 domain) are the providers that hold up for a public release; they stay available behind the same

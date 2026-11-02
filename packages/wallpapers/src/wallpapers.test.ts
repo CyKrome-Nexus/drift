@@ -319,3 +319,31 @@ describe('categories', () => {
     expect(categoryFromTags('city, rain')).toBe('Ambient');
   });
 });
+
+describe('bring your own keys', () => {
+  it('puts the user’s keys over the build’s, and switches their provider on before the fallback', async () => {
+    const { withKeys } = await import('./index');
+    const build = configFromEnv({ WALLPAPER_PROVIDERS: 'nasa,drift', PIXABAY_API_KEY: 'from-build' });
+    const c = withKeys(build, { pexels: '  mine  ', pixabay: '' });
+    expect(c.providers).toEqual(['nasa', 'pexels', 'drift']);
+    expect(c.pexels?.apiKey).toBe('mine');
+    expect(c.pixabay?.apiKey).toBe('from-build');
+    expect(withKeys(configFromEnv({}), { pixabay: 'p2' }).pixabay?.apiKey).toBe('p2');
+    // The build's config is left as it was.
+    expect(build.providers).toEqual(['nasa', 'drift']);
+  });
+
+  it('checks a key with one request and tells a bad key from a bad connection', async () => {
+    const { verifyKey } = await import('./index');
+    const answer = (status: number): Fetch => vi.fn(async () => ({ ok: status < 300, status, json: async () => ({}) }));
+    expect(await verifyKey('pexels', 'k', answer(200))).toBe('ok');
+    expect(await verifyKey('pexels', 'k', answer(401))).toBe('invalid');
+    expect(await verifyKey('pixabay', 'k', answer(400))).toBe('invalid');
+    expect(await verifyKey('pixabay', 'k', answer(429))).toBe('unreachable');
+    expect(await verifyKey('pexels', 'k', vi.fn(async () => { throw new Error('offline'); }))).toBe('unreachable');
+    expect(await verifyKey('pexels', '   ', answer(200))).toBe('invalid');
+    const sent = answer(200);
+    await verifyKey('pexels', ' key ', sent);
+    expect((sent as any).mock.calls[0][1].headers.Authorization).toBe('key');
+  });
+});

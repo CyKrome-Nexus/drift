@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Toast } from './components/Toast';
 import { TopBar } from './components/TopBar';
 import { TrafficLights } from './components/TrafficLights';
 import { UpgradeDialog } from './components/UpgradeDialog';
+import { Welcome } from './components/Welcome';
+import { loadKeys, onboarded } from './lib/catalog';
 import { refreshPlan, restoreSession } from './lib/account';
 import { connectEngine } from './lib/actions';
 import { setPlayback, syncSystemSettings } from './lib/platform';
@@ -21,6 +23,11 @@ const FOCUS_REFRESH_MS = 30_000;
 
 export function App() {
   const view = useApp((s) => s.view);
+  // First launch: connect wallpaper sources (or skip). Keys load before anything is fetched.
+  const [welcome, setWelcome] = useState(() => !onboarded());
+  useEffect(() => {
+    void loadKeys();
+  }, []);
 
   useEffect(() => {
     let disconnect: (() => void) | undefined;
@@ -85,6 +92,7 @@ export function App() {
       {view.name === 'settings' && <Settings section={view.section} />}
       <TrafficLights />
       <UpgradeDialog />
+      {welcome && <Welcome onDone={() => setWelcome(false)} />}
       <Toast />
     </div>
   );

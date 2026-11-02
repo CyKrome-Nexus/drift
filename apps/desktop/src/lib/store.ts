@@ -17,7 +17,7 @@ import {
 import { INITIAL_ACCOUNT, type AccountState, type PlanState } from '@drift/account';
 import type { ApplyRequest, Assignment } from './platform';
 
-export type Section = 'General' | 'Playback' | 'Performance' | 'Displays' | 'Library & storage' | 'Account' | 'About';
+export type Section = 'General' | 'Wallpaper sources' | 'Playback' | 'Performance' | 'Displays' | 'Library & storage' | 'Account' | 'About';
 export type BrowseTab = 'Discover' | 'Library' | 'Favourites';
 
 export type View =

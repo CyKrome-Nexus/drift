@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   CrownSimple,
   Gauge,
+  FilmStrip,
   HardDrives,
   Info,
   Monitor,
@@ -15,12 +16,14 @@ import { planLine } from '@drift/account';
 import { stop } from '../lib/actions';
 import { displayLabel, listDisplays, type Display } from '../lib/platform';
 import { back, openSettings, showUpgrade, toast, useApp, type Section } from '../lib/store';
+import { Sources } from '../components/Sources';
 import { AboutSection } from './AboutSection';
 import { AccountSection } from './AccountSection';
 import { Group, Row, SettingChoice, SettingToggle } from './controls';
 
 const NAV: Array<[Section, ComponentType<IconProps>]> = [
   ['General', SlidersHorizontal],
+  ['Wallpaper sources', FilmStrip],
   ['Playback', PlayCircle],
   ['Performance', Gauge],
   ['Displays', Monitor],
@@ -31,6 +34,7 @@ const NAV: Array<[Section, ComponentType<IconProps>]> = [
 
 const HEADINGS: Record<Section, [string, string]> = {
   General: ['General', 'Changes apply instantly to every running wallpaper.'],
+  'Wallpaper sources': ['Wallpaper sources', 'Connect your own free Pexels and Pixabay keys to browse their videos.'],
   Playback: ['Playback', 'When loops play, pause, and how fast.'],
   Performance: ['Performance', 'Trade fidelity for battery and GPU headroom.'],
   Displays: ['Displays', 'How wallpapers spread across your screens.'],
@@ -176,6 +180,8 @@ function SectionBody({ section }: { section: Section }) {
           <SettingChoice k="scale" label="Scaling" desc="When the aspect ratio differs." options={['Fill', 'Fit', 'Stretch']} />
         </Group>
       );
+    case 'Wallpaper sources':
+      return <Sources />;
     case 'Library & storage':
       return <Storage />;
     case 'Account':
