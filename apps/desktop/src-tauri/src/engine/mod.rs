@@ -720,19 +720,19 @@ mod tests {
         let d = two_displays();
         let a = vec![
             assign("Monitor #1", "drift:3", 10),
-            assign("Monitor #2", "nasa:9", 20),
+            assign("Monitor #2", "pexels:9", 20),
             assign("Unplugged", "drift:5", 30),
         ];
-        let r = running("nasa:9", "Per display", a.clone());
+        let r = running("pexels:9", "Per display", a.clone());
         assert_eq!(assignments_for(&r, &d), a, "an unplugged display keeps its wallpaper for when it returns");
         let w = desired(&r, &d, true);
-        assert_eq!(w.iter().map(|w| (w.wallpaper_id.as_str(), w.started_at_ms)).collect::<Vec<_>>(), [("drift:3", 10), ("nasa:9", 20)]);
+        assert_eq!(w.iter().map(|w| (w.wallpaper_id.as_str(), w.started_at_ms)).collect::<Vec<_>>(), [("drift:3", 10), ("pexels:9", 20)]);
     }
 
     #[test]
     fn per_display_leaves_unassigned_displays_alone() {
         let d = two_displays();
-        let r = running("nasa:9", "Per display", vec![assign("Monitor #2", "nasa:9", 1)]);
+        let r = running("pexels:9", "Per display", vec![assign("Monitor #2", "pexels:9", 1)]);
         let w = desired(&r, &d, true);
         assert_eq!(w.len(), 1);
         assert_eq!(w[0].displays, ["Monitor #2"]);

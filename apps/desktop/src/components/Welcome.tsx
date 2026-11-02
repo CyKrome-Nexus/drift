@@ -1,5 +1,5 @@
 import { ArrowRight } from '@phosphor-icons/react';
-import { finishOnboarding, useKeys } from '../lib/catalog';
+import { finishOnboarding, useConnections } from '../lib/catalog';
 import { Sources } from './Sources';
 
 /**
@@ -8,8 +8,7 @@ import { Sources } from './Sources';
  * (Settings › Wallpaper sources, any time).
  */
 export function Welcome({ onDone }: { onDone: () => void }) {
-  const keys = useKeys();
-  const any = Object.values(keys).some(Boolean);
+  const any = useConnections().some((c) => c.connected);
   const done = () => {
     finishOnboarding();
     onDone();
@@ -20,10 +19,11 @@ export function Welcome({ onDone }: { onDone: () => void }) {
         <span className="eyebrow">Welcome to Drift</span>
         <h1 className="welcome-title">Bring your own wallpapers</h1>
         <p className="welcome-lead">
-          Drift plays thousands of free videos from Pexels and Pixabay as live wallpapers. To use them, connect your own free API
-          key for each: it takes a minute, costs nothing, and keeps your browsing yours.
+          Drift plays thousands of free videos from Pexels, Pixabay and Coverr as live wallpapers. To use them, connect your own
+          free API keys: it takes a minute, costs nothing, and keeps your browsing yours. Name each source as you like, and add
+          more with “Add provider”.
         </p>
-        <Sources />
+        <Sources starter />
         <div className="welcome-actions">
           <button type="button" className="btn btn-ghost" onClick={done}>Skip for now</button>
           <button type="button" className="btn btn-primary" disabled={!any} onClick={done}>

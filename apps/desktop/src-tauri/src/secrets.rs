@@ -3,7 +3,8 @@
 //! them there, unlike the webview's storage on disk.
 //!
 //! - The CyKrome session token.
-//! - The user's own wallpaper-provider API keys (Pexels, Pixabay), which Drift never ships with.
+//! - The user's own wallpaper-provider API keys, one per connection (`pexels-…`, `pixabay-…`,
+//!   `coverr-…`), which Drift never ships with.
 //!
 //! Exposed to the frontend as commands; nothing leaves the store except to the app.
 
@@ -16,14 +17,24 @@ fn entry() -> Result<Entry, String> {
     Entry::new(SERVICE, ACCOUNT).map_err(|e| e.to_string())
 }
 
-/// The providers a key may be stored for; anything else is refused rather than stored.
-const KEY_PROVIDERS: &[&str] = &["pexels", "pixabay"];
+/// The providers a connection can be for.
+const KEY_PROVIDERS: &[&str] = &["pexels", "pixabay", "coverr"];
 
-fn provider_entry(provider: &str) -> Result<Entry, String> {
-    if !KEY_PROVIDERS.contains(&provider) {
-        return Err(format!("{provider} is not a wallpaper provider Drift keeps keys for"));
+/// A connection id (`pexels-x7k2m9q4a1`), or a bare provider name: where the first build kept its
+/// one key per provider, read once to carry it over. Anything else is refused rather than stored.
+fn valid_connection(id: &str) -> bool {
+    if KEY_PROVIDERS.contains(&id) {
+        return true;
     }
-    Entry::new(SERVICE, &format!("provider-{provider}")).map_err(|e| e.to_string())
+    let Some((kind, tail)) = id.split_once('-') else { return false };
+    KEY_PROVIDERS.contains(&kind) && (4..=32).contains(&tail.len()) && tail.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+}
+
+fn provider_entry(connection: &str) -> Result<Entry, String> {
+    if !valid_connection(connection) {
+        return Err(format!("{connection} is not a wallpaper source Drift keeps keys for"));
+    }
+    Entry::new(SERVICE, &format!("provider-{connection}")).map_err(|e| e.to_string())
 }
 
 fn read(entry: Entry) -> Result<Option<String>, String> {
@@ -41,24 +52,24 @@ fn clear(entry: Entry) -> Result<(), String> {
     }
 }
 
-/// The user's key for `provider`, if they saved one.
+/// The key saved for `connection`, if there is one.
 #[tauri::command]
-pub fn provider_key_get(provider: String) -> Result<Option<String>, String> {
-    read(provider_entry(&provider)?)
+pub fn provider_key_get(connection: String) -> Result<Option<String>, String> {
+    read(provider_entry(&connection)?)
 }
 
 #[tauri::command]
-pub fn provider_key_set(provider: String, key: String) -> Result<(), String> {
+pub fn provider_key_set(connection: String, key: String) -> Result<(), String> {
     let key = key.trim();
     if key.is_empty() || key.len() > 256 {
         return Err("That doesn't look like an API key".into());
     }
-    provider_entry(&provider)?.set_password(key).map_err(|e| e.to_string())
+    provider_entry(&connection)?.set_password(key).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn provider_key_clear(provider: String) -> Result<(), String> {
-    clear(provider_entry(&provider)?)
+pub fn provider_key_clear(connection: String) -> Result<(), String> {
+    clear(provider_entry(&connection)?)
 }
 
 #[tauri::command]
@@ -81,11 +92,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn keeps_keys_only_for_known_providers() {
-        assert!(provider_entry("pexels").is_ok());
-        assert!(provider_entry("pixabay").is_ok());
-        assert!(provider_entry("cykrome-session").is_err());
-        assert!(provider_entry("../x").is_err());
-        assert!(provider_key_set("pexels".into(), "   ".into()).is_err());
+    fn keeps_keys_only_for_connections_to_known_providers() {
+        assert!(valid_connection("pexels-x7k2m9q4a1"));
+        assert!(valid_connection("coverr-abcd"));
+        // The first build's one-per-provider entries, read to carry them over.
+        assert!(valid_connection("pixabay"));
+        assert!(!valid_connection("nasa-abcd1234"));
+        assert!(!valid_connection("cykrome-session"));
+        assert!(!valid_connection("pexels-ABC12345"));
+        assert!(!valid_connection("pexels-../x"));
+        assert!(!valid_connection("pexels-abc"));
+        assert!(provider_key_set("pexels-abcd1234".into(), "   ".into()).is_err());
     }
 }

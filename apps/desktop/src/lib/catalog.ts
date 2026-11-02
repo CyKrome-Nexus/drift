@@ -1,49 +1,68 @@
 // The wallpaper catalog for the desktop, plus hooks that keep what it returns in the store's
 // `known` cache.
 //
-// Providers run on the user's own keys (welcome screen, Settings › Wallpaper sources), kept in
-// the OS credential store; see @drift/wallpapers keys.ts. A build may still set keys in .env
-// (VITE_PEXELS_API_KEY, …) for development; the user's win. Saving or removing a key rebuilds the
-// providers behind `catalog`, and every feed on screen reloads.
+// Providers run on the user's own keys, as connections (the welcome screen, Settings › Wallpaper
+// sources; see @drift/wallpapers keys.ts): the list in local storage, each key in the OS
+// credential store. A build may still set keys in .env (VITE_PEXELS_API_KEY, …) for development;
+// they come after the user's. Changing a connection rebuilds the providers behind `catalog`, and
+// every feed on screen reloads.
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { Wallpaper, WallpaperId } from '@drift/core';
 import {
-  KEY_PROVIDERS,
-  cleanKeys,
+  cleanName,
   configFromEnv,
   createCatalog,
+  defaultName,
   feedKey,
-  withKeys,
+  newConnectionId,
+  sanitizeConnections,
+  withConnections,
   type Catalog,
+  type Connection,
+  type ConnectionType,
   type Feed,
-  type KeyedProvider,
-  type ProviderKeys,
 } from '@drift/wallpapers';
 import { inTauri } from './platform';
 import { getState, remember, useApp } from './store';
 
 const BUILD = configFromEnv(import.meta.env as Record<string, string | undefined>, 'VITE_');
 
-function build(keys: ProviderKeys): Catalog {
-  const made = createCatalog(withKeys(BUILD, keys), {
+let connections: Connection[] = [];
+const keys: Record<string, string> = {};
+
+function build(): Catalog {
+  const keyed = connections.filter((c) => keys[c.id]).map((c) => ({ ...c, key: keys[c.id] }));
+  const made = createCatalog(withConnections(BUILD, keyed), {
     onError: (provider, error) => console.warn(`[catalog] ${provider}:`, error instanceof Error ? error.message : error),
   });
   for (const { name, reason } of made.skipped) console.info(`[catalog] ${name} is off: ${reason}`);
   return made;
 }
 
-let current = build({});
-let keys: ProviderKeys = {};
-let version = 0;
-const listeners = new Set<() => void>();
+export interface ConnectionState extends Connection {
+  /** A key is saved for it. */
+  connected: boolean;
+}
 
-function rebuild(next: ProviderKeys): void {
-  keys = cleanKeys(next);
-  current = build(keys);
+let current = build();
+let version = 0;
+let snapshot: ConnectionState[] = [];
+const listeners = new Set<() => void>();
+const listListeners = new Set<() => void>();
+
+/** Tell the connection list's readers it changed. */
+function publish(): void {
+  snapshot = connections.map((c) => ({ ...c, connected: !!keys[c.id] }));
+  listListeners.forEach((l) => l());
+}
+
+function rebuild(): void {
+  current = build();
   version++;
   listeners.forEach((l) => l());
+  publish();
 }
 
 /** The catalog. Stable to hold on to: it always answers from the current providers. */
@@ -70,62 +89,121 @@ export function useCatalogVersion(): number {
   );
 }
 
-// ---- the user's own keys ----------------------------------------------------------------------
+// ---- the user's connections -------------------------------------------------------------------
 
 /** Outside the desktop app (`vite` alone, for design work) keys live in the page's storage. */
 const DEV_KEYS = 'drift.desktop.devkeys.v1';
+const CONNECTIONS_KEY = 'drift.desktop.connections.v1';
 const SOURCES_KEY = 'drift.desktop.sources.v1';
 
-async function readKey(p: KeyedProvider): Promise<string | undefined> {
-  if (inTauri) return (await invoke<string | null>('provider_key_get', { provider: p })) ?? undefined;
+function devKeys(): Record<string, string> {
   try {
-    return JSON.parse(localStorage.getItem(DEV_KEYS) ?? '{}')[p];
+    return JSON.parse(localStorage.getItem(DEV_KEYS) ?? '{}') ?? {};
   } catch {
-    return undefined;
+    return {};
   }
 }
 
-async function writeKey(p: KeyedProvider, key: string | null): Promise<void> {
+async function readKey(id: string): Promise<string | undefined> {
+  if (inTauri) return (await invoke<string | null>('provider_key_get', { connection: id })) ?? undefined;
+  return devKeys()[id];
+}
+
+async function writeKey(id: string, key: string | null): Promise<void> {
   if (inTauri) {
-    await (key ? invoke('provider_key_set', { provider: p, key }) : invoke('provider_key_clear', { provider: p }));
+    await (key ? invoke('provider_key_set', { connection: id, key }) : invoke('provider_key_clear', { connection: id }));
     return;
   }
-  const all = (() => {
-    try {
-      return JSON.parse(localStorage.getItem(DEV_KEYS) ?? '{}');
-    } catch {
-      return {};
-    }
-  })();
-  if (key) all[p] = key;
-  else delete all[p];
+  const all = devKeys();
+  if (key) all[id] = key;
+  else delete all[id];
   localStorage.setItem(DEV_KEYS, JSON.stringify(all));
 }
 
-/** Read the saved keys and switch their providers on. Call once at startup. */
-export async function loadKeys(): Promise<void> {
-  const saved: ProviderKeys = {};
-  for (const { name } of KEY_PROVIDERS) {
+function saveList(): void {
+  try {
+    localStorage.setItem(CONNECTIONS_KEY, JSON.stringify(connections));
+  } catch {
+    // Storage blocked: the connections last this session.
+  }
+}
+
+/** The first build kept one key per provider, under the provider's name: make them connections. */
+async function carryOverOldKeys(): Promise<void> {
+  for (const type of ['pexels', 'pixabay'] as const) {
+    const key = await readKey(type).catch(() => undefined);
+    if (!key) continue;
+    const c: Connection = { id: newConnectionId(type), type, name: defaultName(type, connections) };
+    await writeKey(c.id, key);
+    await writeKey(type, null).catch(() => {});
+    connections = [...connections, c];
+    keys[c.id] = key;
+  }
+  if (connections.length) saveList();
+}
+
+/** Read the saved connections and their keys, and switch their providers on. Call once at startup. */
+export async function loadConnections(): Promise<void> {
+  let raw: unknown = null;
+  try {
+    raw = JSON.parse(localStorage.getItem(CONNECTIONS_KEY) ?? 'null');
+  } catch {
+    // Unreadable: no connections.
+  }
+  connections = sanitizeConnections(raw);
+  for (const c of connections) {
     try {
-      const k = await readKey(name);
-      if (k) saved[name] = k;
+      const k = await readKey(c.id);
+      if (k) keys[c.id] = k;
     } catch (err) {
-      console.warn(`[catalog] could not read the ${name} key`, err);
+      console.warn(`[catalog] could not read the key for ${c.name}`, err);
     }
   }
-  if (Object.keys(saved).length) rebuild(saved);
+  if (raw === null) await carryOverOldKeys();
+  rebuild();
 }
 
-/** Save (or with null, remove) the user's key for `provider`, and use it at once. */
-export async function setKey(provider: KeyedProvider, key: string | null): Promise<void> {
-  await writeKey(provider, key?.trim() || null);
-  rebuild({ ...keys, [provider]: key?.trim() || undefined });
+/** Add a connection with its key, and use it at once. */
+export async function addConnection(type: ConnectionType, name: string, key: string): Promise<Connection> {
+  const c: Connection = { id: newConnectionId(type), type, name: cleanName(name, type) };
+  await writeKey(c.id, key.trim());
+  keys[c.id] = key.trim();
+  connections = [...connections, c];
+  saveList();
+  rebuild();
+  return c;
 }
 
-/** Which providers the user has a key saved for. */
-export function useKeys(): Record<KeyedProvider, boolean> {
-  useCatalogVersion();
-  return Object.fromEntries(KEY_PROVIDERS.map((p) => [p.name, !!keys[p.name]])) as Record<KeyedProvider, boolean>;
+export function renameConnection(id: string, name: string): void {
+  connections = connections.map((c) => (c.id === id ? { ...c, name: cleanName(name, c.type) } : c));
+  saveList();
+  // Names don't change what is fetched: the feeds stay, only the list re-renders.
+  publish();
+}
+
+export async function replaceKey(id: string, key: string): Promise<void> {
+  await writeKey(id, key.trim());
+  keys[id] = key.trim();
+  rebuild();
+}
+
+export async function removeConnection(id: string): Promise<void> {
+  await writeKey(id, null);
+  delete keys[id];
+  connections = connections.filter((c) => c.id !== id);
+  saveList();
+  rebuild();
+}
+
+/** The user's connections, in order. */
+export function useConnections(): ConnectionState[] {
+  return useSyncExternalStore(
+    (l) => {
+      listListeners.add(l);
+      return () => listListeners.delete(l);
+    },
+    () => snapshot,
+  );
 }
 
 /** Whether the welcome screen has been answered (keys added, or skipped). */

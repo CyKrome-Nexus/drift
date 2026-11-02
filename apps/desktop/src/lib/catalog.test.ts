@@ -1,15 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The OS credential store lives in Rust (src-tauri/src/secrets.rs); this stands in for it.
-const keychain = vi.hoisted(() => ({ keys: {} as Record<string, string>, calls: [] as string[] }));
+const keychain = vi.hoisted(() => ({ keys: {} as Record<string, string> }));
 
 vi.mock('./platform', () => ({ inTauri: true }));
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(async (cmd: string, args: { provider: string; key?: string }) => {
-    keychain.calls.push(`${cmd} ${args.provider}`);
-    if (cmd === 'provider_key_get') return keychain.keys[args.provider] ?? null;
-    if (cmd === 'provider_key_set') keychain.keys[args.provider] = args.key!;
-    if (cmd === 'provider_key_clear') delete keychain.keys[args.provider];
+  invoke: vi.fn(async (cmd: string, args: { connection: string; key?: string }) => {
+    if (cmd === 'provider_key_get') return keychain.keys[args.connection] ?? null;
+    if (cmd === 'provider_key_set') keychain.keys[args.connection] = args.key!;
+    if (cmd === 'provider_key_clear') delete keychain.keys[args.connection];
   }),
 }));
 
@@ -18,37 +17,59 @@ async function fresh() {
   return import('./catalog');
 }
 
-const names = (c: { providers: ReadonlyArray<{ name: string }> }) => c.providers.map((p) => p.name);
+const providers = (c: { providers: ReadonlyArray<{ name: string }> }) => c.providers.map((p) => p.name);
+const LIST = 'drift.desktop.connections.v1';
 
-describe('the user’s own provider keys', () => {
+describe('wallpaper sources (connections)', () => {
   beforeEach(() => {
     keychain.keys = {};
-    keychain.calls = [];
     localStorage.clear();
   });
 
-  it('ships with no keys: only Drift’s own wallpapers until the user adds one', async () => {
-    const { catalog, loadKeys } = await fresh();
-    await loadKeys();
-    expect(names(catalog)).toEqual(['drift']);
+  it('ships with no keys: only Drift’s own wallpapers until the user adds a source', async () => {
+    const { catalog, loadConnections } = await fresh();
+    await loadConnections();
+    expect(providers(catalog)).toEqual(['drift']);
   });
 
-  it('reads saved keys from the keychain at startup and switches their providers on', async () => {
-    keychain.keys = { pexels: 'pk' };
-    const { catalog, loadKeys } = await fresh();
-    await loadKeys();
-    expect(names(catalog)).toEqual(['pexels', 'drift']);
-    expect(keychain.calls).toEqual(['provider_key_get pexels', 'provider_key_get pixabay']);
+  it('adds sources with their own names and keys, and uses them at once through the same catalog', async () => {
+    const { addConnection, catalog, loadConnections } = await fresh();
+    await loadConnections();
+    const work = await addConnection('pexels', '  Work account ', 'p1');
+    await addConnection('pixabay', '', 'x1');
+    expect(work).toMatchObject({ type: 'pexels', name: 'Work account' });
+    expect(keychain.keys[work.id]).toBe('p1');
+    expect(providers(catalog)).toEqual(['pexels', 'pixabay', 'drift']);
+    // The list is remembered; the keys are not in it.
+    const saved = JSON.parse(localStorage.getItem(LIST)!);
+    expect(saved.map((c: { name: string }) => c.name)).toEqual(['Work account', 'Pixabay']);
+    expect(JSON.stringify(saved)).not.toContain('p1');
   });
 
-  it('saves a key to the keychain, uses it at once through the same catalog, and removes it', async () => {
-    const { catalog, setKey } = await fresh();
-    await setKey('pixabay', '  px  ');
-    expect(keychain.keys.pixabay).toBe('px');
-    expect(names(catalog)).toEqual(['pixabay', 'drift']);
-    await setKey('pixabay', null);
-    expect(keychain.keys.pixabay).toBeUndefined();
-    expect(names(catalog)).toEqual(['drift']);
+  it('renames, replaces a key and removes a source, and reads them back next launch', async () => {
+    const first = await fresh();
+    await first.loadConnections();
+    const a = await first.addConnection('pexels', 'Pexels', 'old');
+    const b = await first.addConnection('pexels', 'Pexels 2', 'second');
+    first.renameConnection(a.id, 'Main');
+    await first.replaceKey(a.id, 'new');
+    await first.removeConnection(b.id);
+    expect(keychain.keys).toEqual({ [a.id]: 'new' });
+
+    const next = await fresh();
+    await next.loadConnections();
+    expect(providers(next.catalog)).toEqual(['pexels', 'drift']);
+    expect(JSON.parse(localStorage.getItem(LIST)!)).toEqual([{ id: a.id, type: 'pexels', name: 'Main' }]);
+  });
+
+  it('carries over keys the first build kept one per provider', async () => {
+    keychain.keys = { pexels: 'legacy' };
+    const { catalog, loadConnections } = await fresh();
+    await loadConnections();
+    expect(providers(catalog)).toEqual(['pexels', 'drift']);
+    const [c] = JSON.parse(localStorage.getItem(LIST)!);
+    expect(c).toMatchObject({ type: 'pexels', name: 'Pexels' });
+    expect(keychain.keys).toEqual({ [c.id]: 'legacy' });
   });
 
   it('shows the welcome screen until it is answered, once', async () => {

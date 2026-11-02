@@ -70,7 +70,7 @@ describe('generated wallpapers', () => {
 describe('wallpaper ids', () => {
   it('names the provider', () => {
     expect(providerOf('coverr:S1YbPl1NfI')).toBe('coverr');
-    expect(providerOf('nasa:FD 17 hi res')).toBe('nasa');
+    expect(providerOf('pixabay:125')).toBe('pixabay');
     expect(providerOf('nope')).toBe('');
   });
 
@@ -79,7 +79,7 @@ describe('wallpaper ids', () => {
     expect(migrateId('coverr:abc')).toBe('coverr:abc');
     expect(migrateId(99)).toBeNull();
     expect(migrateId('6')).toBeNull();
-    expect(migrateIds([6, 'drift:6', 14, null, 'nasa:x'])).toEqual(['drift:6', 'drift:14', 'nasa:x']);
+    expect(migrateIds([6, 'drift:6', 14, null, 'pexels:x'])).toEqual(['drift:6', 'drift:14', 'pexels:x']);
     expect(migrateIds('nope')).toEqual([]);
   });
 

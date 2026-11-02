@@ -26,7 +26,7 @@ import { Group, Row, Toggle } from '../../components/controls';
 import { TabScreen } from '../../components/TabScreen';
 import { Text } from '../../components/Text';
 import { requirePro } from '../../lib/account';
-import { useKeys } from '../../lib/catalog';
+import { useConnections } from '../../lib/catalog';
 import { checkFollowedCreators, enableNotifications } from '../../lib/notifications';
 import { setState, toast, updateSettings, useApp } from '../../lib/store';
 
@@ -107,8 +107,7 @@ function ProfileCard() {
 export default function Settings() {
   const insets = useSafeAreaInsets();
   const plan = useApp((s) => s.account.plan.plan);
-  const keys = useKeys();
-  const connected = Object.values(keys).filter(Boolean).length;
+  const connected = useConnections().filter((c) => c.connected).length;
   const sources = connected ? `${connected} connected` : 'Add keys';
   return (
     <TabScreen route="settings" style={{ backgroundColor: color.bg }}>
@@ -127,7 +126,7 @@ export default function Settings() {
         {Platform.OS === 'ios' && <ShortcutRows />}
 
         <Group title="Wallpaper sources">
-          <Row first icon={ic(FilmStrip)} label="Pexels & Pixabay keys" value={sources} onPress={() => router.push('/sources')} />
+          <Row first icon={ic(FilmStrip)} label="Your provider keys" value={sources} onPress={() => router.push('/sources')} />
         </Group>
 
         <Group title="Downloads">

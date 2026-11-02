@@ -6,7 +6,6 @@
 //   PIXABAY_API_KEY       Pixabay's key (free: 100 requests a minute).
 //   COVERR_API_KEY        Coverr's key, for `coverr`. Free (Demo) or paid (Production).
 //   COVERR_API_URL        Optional; Coverr's own API unless testing.
-//   NASA_ASSETS_URL       Optional; NASA's own asset host unless testing (`nasa` needs no key).
 //
 // Each app reads these with its bundler's prefix (VITE_ on the desktop, EXPO_PUBLIC_ on the
 // phone). A provider listed without what it needs is skipped and reported (`skipped`), never
@@ -19,30 +18,37 @@
 
 import { coverrProvider, type CoverrConfig } from './providers/coverr';
 import { driftProvider } from './providers/drift';
-import { nasaProvider, type NasaConfig } from './providers/nasa';
 import { pexelsProvider, type PexelsConfig } from './providers/pexels';
 import { pixabayProvider, type PixabayConfig } from './providers/pixabay';
+import { failover } from './failover';
 import type { ProviderContext, WallpaperProvider } from './types';
 
 export const DEFAULT_PROVIDERS: readonly string[] = ['pexels', 'pixabay', 'drift'];
 
+/** A keyed provider's config, with any further keys to fall over to (see failover.ts). */
+type Keyed<C extends { apiKey: string }> = C & { apiKeys?: string[] };
+
 export interface WallpaperConfig {
   /** Provider names in priority order. */
   providers: string[];
-  pexels?: PexelsConfig;
-  pixabay?: PixabayConfig;
-  coverr?: CoverrConfig;
-  nasa?: NasaConfig;
+  pexels?: Keyed<PexelsConfig>;
+  pixabay?: Keyed<PixabayConfig>;
+  coverr?: Keyed<CoverrConfig>;
+}
+
+/** One provider per key, the first key first, behind one failover provider. */
+function perKey<C extends { apiKey: string }>(config: Keyed<C>, make: (c: C) => WallpaperProvider): WallpaperProvider {
+  const keys = [...new Set([config.apiKey, ...(config.apiKeys ?? [])].map((k) => k.trim()).filter(Boolean))];
+  return failover(keys.map((apiKey) => make({ ...config, apiKey })));
 }
 
 type Factory = (config: WallpaperConfig, ctx: ProviderContext) => WallpaperProvider | { missing: string };
 
 /** Every provider Drift knows. A new one is an adapter in providers/ and a line here. */
 export const PROVIDER_FACTORIES: Record<string, Factory> = {
-  pexels: (c, ctx) => (c.pexels?.apiKey ? pexelsProvider(c.pexels, ctx) : { missing: 'PEXELS_API_KEY' }),
-  pixabay: (c, ctx) => (c.pixabay?.apiKey ? pixabayProvider(c.pixabay, ctx) : { missing: 'PIXABAY_API_KEY' }),
-  coverr: (c, ctx) => (c.coverr?.apiKey ? coverrProvider(c.coverr, ctx) : { missing: 'COVERR_API_KEY' }),
-  nasa: (c, ctx) => nasaProvider(c.nasa ?? {}, ctx),
+  pexels: (c, ctx) => (c.pexels?.apiKey ? perKey(c.pexels, (k) => pexelsProvider(k, ctx)) : { missing: 'PEXELS_API_KEY' }),
+  pixabay: (c, ctx) => (c.pixabay?.apiKey ? perKey(c.pixabay, (k) => pixabayProvider(k, ctx)) : { missing: 'PIXABAY_API_KEY' }),
+  coverr: (c, ctx) => (c.coverr?.apiKey ? perKey(c.coverr, (k) => coverrProvider(k, ctx)) : { missing: 'COVERR_API_KEY' }),
   drift: () => driftProvider(),
 };
 
@@ -62,7 +68,6 @@ export function configFromEnv(env: Record<string, string | undefined>, prefix = 
     pexels: pexelsKey ? { apiKey: pexelsKey } : undefined,
     pixabay: pixabayKey ? { apiKey: pixabayKey } : undefined,
     coverr: coverrKey ? { apiKey: coverrKey, baseUrl: read('COVERR_API_URL') } : undefined,
-    nasa: { assetsUrl: read('NASA_ASSETS_URL') },
   };
 }
 
